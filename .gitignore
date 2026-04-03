@@ -1,0 +1,5 @@
+sync/.env
+sync/sync_outbound_log.txt
+__pycache__/
+*.pyc
+.env
