@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: dashboard-outbound
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SHEETS_WEBAPP_URL
+        sync: false
