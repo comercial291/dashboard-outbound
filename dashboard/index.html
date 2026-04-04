@@ -800,10 +800,14 @@ function populateVendorFilter() {
     if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
   });
 
-  // 3. Filtra apenas quem tem deal; usa comparação de string normalizada
+  // 3. Usa todos que estão no nameMap (users + owner dos deals)
+  // Se owner_id dos deals estiver vazio (problema de sync), cai só nos users
   const idsWithDeals = new Set(RAW.deals.map(d => normId(d.owner_id)).filter(Boolean));
+  const allIds = new Set([...Object.keys(nameMap)]);
+  // Prioriza quem tem deal; se ninguém tem deal (dados antigos), mostra todos
+  const filterIds = idsWithDeals.size > 0 ? idsWithDeals : allIds;
   const owners = Object.entries(nameMap)
-    .filter(([id]) => idsWithDeals.has(id))
+    .filter(([id]) => filterIds.has(id))
     .sort((a, b) => a[1].localeCompare(b[1]));
 
   owners.forEach(([id, name]) => {
