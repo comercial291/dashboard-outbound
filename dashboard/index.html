@@ -747,26 +747,37 @@ function loadMockData() {
 }
 
 // ─── VENDOR FILTER ────────────────────────────────────────────────────────────
+// Normaliza ID para string sem ".0" (Sheets retorna números como float)
+function normId(v) { return v == null ? '' : String(v).replace(/\.0+$/, ''); }
+
 function populateVendorFilter() {
   const sel = document.getElementById('f-vendor');
-  const cur = sel.value;
+  const cur = normId(sel.value);
   sel.innerHTML = '<option value="all">Todos os vendedores</option>';
 
-  // Monta mapa id→nome: prioriza RAW.users, complementa com owner_name dos deals
+  // 1. Mapa id→nome a partir dos usuários da aba Users
   const nameMap = {};
-  RAW.users.forEach(u => { if (u.id && u.name) nameMap[u.id] = u.name; });
-  RAW.deals.forEach(d => { if (d.owner_id && d.owner_name && !nameMap[d.owner_id]) nameMap[d.owner_id] = d.owner_name; });
+  RAW.users.forEach(u => {
+    const id = normId(u.id);
+    if (id && u.name) nameMap[id] = u.name;
+  });
 
-  // Só mostra usuários que têm pelo menos 1 deal
-  const idsWithDeals = new Set(RAW.deals.map(d => d.owner_id).filter(Boolean));
+  // 2. Complementa com owner_name dos deals (cobre usuários deletados/inativos)
+  RAW.deals.forEach(d => {
+    const id = normId(d.owner_id);
+    if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
+  });
+
+  // 3. Filtra apenas quem tem deal; usa comparação de string normalizada
+  const idsWithDeals = new Set(RAW.deals.map(d => normId(d.owner_id)).filter(Boolean));
   const owners = Object.entries(nameMap)
-    .filter(([id]) => idsWithDeals.has(Number(id)) || idsWithDeals.has(String(id)))
-    .sort((a,b) => a[1].localeCompare(b[1]));
+    .filter(([id]) => idsWithDeals.has(id))
+    .sort((a, b) => a[1].localeCompare(b[1]));
 
   owners.forEach(([id, name]) => {
     const opt = document.createElement('option');
     opt.value = id; opt.textContent = name;
-    if (id == cur) opt.selected = true;
+    if (id === cur) opt.selected = true;
     sel.appendChild(opt);
   });
 }
@@ -778,7 +789,7 @@ function filteredDeals() {
   const vid  = STATE.vendor;
   const pl   = STATE.pipeline;
   return RAW.deals.filter(d => {
-    if (vid !== 'all' && d.owner_id != vid) return false;
+    if (vid !== 'all' && normId(d.owner_id) !== normId(vid)) return false;
     if (pl === 'presales' && d.pipeline_id != PRESALES_PIPELINE_ID) return false;
     if (pl === 'sales'    && d.pipeline_id != SALES_PIPELINE_ID)    return false;
     return true;
