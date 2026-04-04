@@ -145,6 +145,7 @@ button{font-family:inherit;cursor:pointer}
 ═══════════════════════════════════════════════════════════ */
 .kpi-row{display:grid;gap:12px;margin-bottom:18px}
 .kpi-row.cols-6{grid-template-columns:repeat(6,1fr)}
+.kpi-row.cols-5{grid-template-columns:repeat(5,1fr)}
 .kpi-row.cols-4{grid-template-columns:repeat(4,1fr)}
 .kpi-row.cols-3{grid-template-columns:repeat(3,1fr)}
 .kcard{background:var(--card);border-radius:var(--radius);padding:16px 18px;
@@ -274,10 +275,11 @@ tr:hover td{background:var(--primary-lt)}
 }
 @media(max-width:1100px){
   .kpi-row.cols-6{grid-template-columns:repeat(3,1fr)}
+  .kpi-row.cols-5{grid-template-columns:repeat(3,1fr)}
   .grid-65{grid-template-columns:1fr}
 }
 @media(max-width:750px){
-  .kpi-row.cols-6,.kpi-row.cols-4,.kpi-row.cols-3{grid-template-columns:repeat(2,1fr)}
+  .kpi-row.cols-6,.kpi-row.cols-5,.kpi-row.cols-4,.kpi-row.cols-3{grid-template-columns:repeat(2,1fr)}
   .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
   .topbar-title{font-size:14px}
   .content{padding:12px}
@@ -383,7 +385,7 @@ tr:hover td{background:var(--primary-lt)}
     <!-- KPIs principais -->
     <div class="kpi-row cols-6" id="kpi-visao">
       <div class="kcard"><div class="kcard-label">Total de Leads</div><div class="kcard-value" id="k-leads">–</div><div class="kcard-sub" id="k-leads-sub">criados no período</div></div>
-      <div class="kcard success"><div class="kcard-label">Reuniões Agendadas</div><div class="kcard-value" id="k-reunioes">–</div><div class="kcard-sub" id="k-reunioes-sub">via Pré-Vendas</div></div>
+      <div class="kcard success"><div class="kcard-label">Reuniões Agendadas</div><div class="kcard-value" id="k-reunioes">–</div><div class="kcard-sub" id="k-reunioes-sub">Pré-Vendas ganhos</div></div>
       <div class="kcard warning"><div class="kcard-label">Oportunidades</div><div class="kcard-value" id="k-opts">–</div><div class="kcard-sub" id="k-opts-sub">em aberto (Vendas)</div></div>
       <div class="kcard success"><div class="kcard-label">Ganhos</div><div class="kcard-value small" id="k-won">–</div><div class="kcard-sub" id="k-won-sub">R$ 0,00</div></div>
       <div class="kcard"><div class="kcard-label">Taxa de Conversão</div><div class="kcard-value" id="k-conv">–</div><div class="kcard-sub" id="k-conv-sub">ganhos / total fechados</div></div>
@@ -392,16 +394,21 @@ tr:hover td{background:var(--primary-lt)}
 
     <!-- Resultados do Período -->
     <div class="section-header"><div class="section-title">Resultados do Período</div></div>
-    <div class="kpi-row cols-4" id="kpi-results">
+    <div class="kpi-row cols-5" id="kpi-results">
       <div class="kcard" style="border-top:3px solid var(--primary)">
-        <div class="kcard-label">Ganhos — Pré-Vendas</div>
+        <div class="kcard-label">Reunião Agendada</div>
         <div class="kcard-value" id="r-won-pre">–</div>
-        <div class="kcard-sub" id="r-won-pre-sub">Reuniões agendadas no período</div>
+        <div class="kcard-sub" id="r-won-pre-sub">Pré-Vendas ganhos no período</div>
       </div>
       <div class="kcard success">
         <div class="kcard-label">Ganhos — Vendas</div>
         <div class="kcard-value" id="r-won">–</div>
-        <div class="kcard-sub" id="r-won-sub">Valor: R$ 0,00 · Ticket: R$ 0,00</div>
+        <div class="kcard-sub" id="r-won-sub">Ticket: R$ 0,00</div>
+      </div>
+      <div class="kcard success">
+        <div class="kcard-label">Valor Fechado no Período</div>
+        <div class="kcard-value small" id="r-valor">–</div>
+        <div class="kcard-sub" id="r-valor-sub">receita gerada no período</div>
       </div>
       <div class="kcard danger">
         <div class="kcard-label">Negócios Perdidos</div>
@@ -420,22 +427,18 @@ tr:hover td{background:var(--primary-lt)}
       <div class="section-title">Evolução do Período</div>
       <div style="font-size:11px;color:var(--text2)" id="granularity-label">por semana</div>
     </div>
-    <div class="grid-4" style="margin-bottom:14px">
+    <div class="grid-3" style="margin-bottom:14px">
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--primary)">Novos Leads</div>
-        <div class="chart-wrap" style="height:160px"><canvas id="ch-leads"></canvas></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-leads"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--warning)">Oportunidades</div>
-        <div class="chart-wrap" style="height:160px"><canvas id="ch-opts"></canvas></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-opts"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
-        <div class="chart-wrap" style="height:160px"><canvas id="ch-contas"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:8px;color:var(--danger)">Valor Fechado (R$)</div>
-        <div class="chart-wrap" style="height:160px"><canvas id="ch-valor-fechado"></canvas></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-contas"></canvas></div>
       </div>
     </div>
 
@@ -951,17 +954,31 @@ function renderTab(tab) {
 
 // ─── TAB: VISÃO GERAL ─────────────────────────────────────────────────────────
 function renderVisao() {
+  // Filtro de vendedor apenas (sem filtro de funil) — garante que
+  // GANHOS sempre vem de Vendas e REUNIÕES AGENDADAS sempre de Pré-Vendas
+  const vid = STATE.vendor;
+  const byVendor = RAW.deals.filter(d =>
+    vid === 'all' || normId(d.owner_id) === normId(vid)
+  );
+
+  const salesFixed = byVendor.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  const preFixed   = byVendor.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
+
+  // Para leads / Oportunidades respeita também o filtro de funil
   const all   = filteredDeals();
   const pre   = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
   const sales = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
 
-  // Fechados → data de fechamento; abertos → data de abertura
-  const inPeriod = dealsInRangeSmart(all);
-  const leads    = dealsInRange(all, 'add_time');          // novos leads criados no período
-  const reunioes = inPeriod.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID && d.status === 'won');
-  const won      = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'won');
-  const lost     = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'lost');
-  const optsOpen = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'open');
+  // Aplicar filtro de data
+  const inPeriodSales = dealsInRangeSmart(salesFixed);
+  const inPeriodPre   = dealsInRangeSmart(preFixed);
+  const inPeriod      = dealsInRangeSmart(all);
+
+  const leads    = dealsInRange(all, 'add_time');
+  const reunioes = inPeriodPre.filter(d => d.status === 'won');   // SEMPRE Pré-Vendas
+  const won      = inPeriodSales.filter(d => d.status === 'won'); // SEMPRE Vendas
+  const lost     = inPeriodSales.filter(d => d.status === 'lost');
+  const optsOpen = salesFixed.filter(d => d.status === 'open');   // pipeline atual sem filtro de data
 
   const wonVal   = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
   const lostVal  = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
@@ -994,7 +1011,9 @@ function renderVisao() {
 
   // Resultados — Vendas
   setText('r-won',  won.length);
-  setText('r-won-sub', `Valor: R$ ${fmt(wonVal)} · Ticket: R$ ${fmt(ticket)}`);
+  setText('r-won-sub', `Ticket: R$ ${fmt(ticket)}`);
+  setText('r-valor', 'R$ '+fmt(wonVal));
+  setText('r-valor-sub', `receita gerada no período`);
   setText('r-lost', lost.length);
   setText('r-lost-sub', `Valor: R$ ${fmt(lostVal)}`);
   setText('r-ticket', 'R$ '+fmt(ticket));
@@ -1147,34 +1166,6 @@ function renderMainChart(gran) {
     options: singleChartOptions()
   });
 
-  // Gráfico de Valor Fechado (R$) — deals won pelo valor, agrupado pelo período atual
-  const valorData = periods.map(p =>
-    sales.filter(d => d.status === 'won' && inP(d, 'won_time', p))
-         .reduce((s, d) => s + (parseFloat(d.value) || 0), 0)
-  );
-
-  const granMapLabel = { day:'por dia', week:'por semana', month:'por mês' };
-  const vlEl = document.getElementById('valor-fechado-label');
-  if (vlEl) vlEl.textContent = granMapLabel[gran] || 'por período';
-
-  const valorOptions = {
-    responsive: true, maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { title: items => items[0].label, label: i => ' R$ '+fmt(i.raw) } }
-    },
-    scales: {
-      x: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 } } },
-      y: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 }, callback: v => 'R$'+fmtK(v) }, beginAtZero: true }
-    }
-  };
-
-  destroyChart('ch-valor-fechado');
-  CHARTS['ch-valor-fechado'] = new Chart(document.getElementById('ch-valor-fechado').getContext('2d'), {
-    type: 'bar',
-    data: { labels, datasets: [{ data: valorData, backgroundColor: 'rgba(239,68,68,.75)', borderRadius: 4, borderSkipped: false }] },
-    options: valorOptions
-  });
 }
 
 function renderForecastChart() {
@@ -1336,8 +1327,19 @@ function renderForecastChart() {
 
 function renderGanhosMes() {
   const all      = filteredDeals();  // respeita filtro de vendedor e funil
-  const sales    = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'won');
-  const presales = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID && d.status === 'won');
+
+  // Sales: respeita filtro de funil normalmente
+  const sales    = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID && d.status === 'won');
+
+  // Reuniões (Pré-Vendas): SEMPRE do pipeline de Pré-Vendas, só aplica filtro de vendedor
+  // (ignora filtro de funil para não sumir quando "Vendas" estiver selecionado)
+  const vid = STATE.vendor;
+  const presales = RAW.deals.filter(d => {
+    if (d.pipeline_id != PRESALES_PIPELINE_ID) return false;
+    if (d.status !== 'won') return false;
+    if (vid !== 'all' && normId(d.owner_id) !== normId(vid)) return false;
+    return true;
+  });
   const to       = STATE.toDate || new Date();
   const gran     = getGranularity();
 
@@ -1673,7 +1675,7 @@ function renderMotivos() {
 
 // ─── CHART FACTORY ────────────────────────────────────────────────────────────
 function chartOptions({ stacked=false, yTitle='', money=false } = {}) {
-  const textColor  = getComputedStyle(document.documentElement).getPropertyValue('--text2').trim() || '#64748b';
+  const textColor  = getComputedStyle(document.documentElement).getPropertyValue('--text').trim()  || '#1e293b';
   const gridColor  = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,.06)';
   return {
     responsive: true,
