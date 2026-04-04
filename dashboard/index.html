@@ -416,19 +416,27 @@ tr:hover td{background:var(--primary-lt)}
       <div class="section-title">Evolução do Período</div>
       <div style="font-size:11px;color:var(--text2)" id="granularity-label">por semana</div>
     </div>
-    <div class="grid-3" style="margin-bottom:14px">
+    <div class="grid-3" style="margin-bottom:10px">
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--primary)">Novos Leads</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-leads"></canvas></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-leads"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--warning)">Oportunidades</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-opts"></canvas></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-opts"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-contas"></canvas></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-contas"></canvas></div>
       </div>
+    </div>
+    <!-- Gráfico de Valor Fechado -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="card-title" style="color:var(--danger)">Valor Fechado (R$)</div>
+        <div style="font-size:11px;color:var(--text2)" id="valor-fechado-label">por mês</div>
+      </div>
+      <div class="chart-wrap" style="height:180px"><canvas id="ch-valor-fechado"></canvas></div>
     </div>
 
     <!-- Forecast -->
@@ -580,8 +588,8 @@ const SALES_PIPELINE_ID    = 2;
 
 // ─── META MENSAL (ajuste conforme suas metas) ─────────────────────────────────
 const METAS = {
-  novas_contas: 10,   // número de deals ganhos por mês (Vendas)
-  mrr_mensal:   50000, // receita mensal alvo (R$)
+  novas_contas: 16,    // número de deals ganhos por mês (Vendas)
+  mrr_mensal:   12000, // receita mensal alvo R$ 12.000
   reunioes:     30,    // reuniões agendadas por mês (Pré-Vendas)
 };
 
@@ -1023,6 +1031,44 @@ function renderMainChart(gran) {
     type: 'bar',
     data: { labels, datasets: [{ data: contasData, backgroundColor: 'rgba(16,185,129,.8)', borderRadius: 4, borderSkipped: false }] },
     options: singleChartOptions('rgba(16,185,129,.8)')
+  });
+
+  // Gráfico de Valor Fechado (R$) — deals won pelo valor, agrupado pelo período atual
+  const valorData = periods.map(p =>
+    sales.filter(d => d.status === 'won' && inP(d, 'won_time', p))
+         .reduce((s, d) => s + (parseFloat(d.value) || 0), 0)
+  );
+
+  const granMapLabel = { day:'por dia', week:'por semana', month:'por mês' };
+  const vlEl = document.getElementById('valor-fechado-label');
+  if (vlEl) vlEl.textContent = granMapLabel[gran] || 'por período';
+
+  const valorOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: items => items[0].label,
+          label: i => ' R$ ' + fmt(i.raw)
+        }
+      }
+    },
+    scales: {
+      x: { grid: { color: 'var(--chart-grid)' }, ticks: { color: 'var(--text2)', font: { size: 11 } } },
+      y: {
+        grid: { color: 'var(--chart-grid)' },
+        ticks: { color: 'var(--text2)', font: { size: 11 }, callback: v => 'R$' + fmtK(v) },
+        beginAtZero: true
+      }
+    }
+  };
+
+  destroyChart('ch-valor-fechado');
+  CHARTS['ch-valor-fechado'] = new Chart(document.getElementById('ch-valor-fechado').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: valorData, backgroundColor: 'rgba(239,68,68,.75)', borderRadius: 4, borderSkipped: false }] },
+    options: valorOptions
   });
 }
 
