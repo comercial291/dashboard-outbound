@@ -1178,48 +1178,99 @@ function renderMainChart(gran) {
 }
 
 function renderForecastChart() {
-  // Últimos 5 meses realizados + projeção dos próximos 3
-  const sales = filteredDeals().filter(d => d.pipeline_id == SALES_PIPELINE_ID && d.status==='won');
-  const now   = new Date();
-  const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const allDeals  = filteredDeals();
+  const sales     = allDeals.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  const wonDeals  = sales.filter(d => d.status === 'won');
+  const openDeals = sales.filter(d => d.status === 'open');
+  const now       = new Date();
+  const MONTHS    = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-  const monthData = {};
-  for (let m = -4; m <= 0; m++) {
-    const d = new Date(now.getFullYear(), now.getMonth()+m, 1);
-    const k = d.getFullYear()+'-'+pad(d.getMonth()+1);
-    monthData[k] = { label: MONTHS[d.getMonth()]+'/'+String(d.getFullYear()).slice(2), count:0, value:0 };
+  // ── Helpers de dias úteis ──────────────────────────────────
+  function isWorkday(y, m, d) { const w = new Date(y,m,d).getDay(); return w>0 && w<6; }
+  function bDaysInMonth(y, m) {
+    let n=0, days=new Date(y,m+1,0).getDate();
+    for (let d=1;d<=days;d++) if(isWorkday(y,m,d)) n++;
+    return n;
   }
-  sales.forEach(d => {
+  function bDaysUntil(y, m, day) {
+    let n=0;
+    for (let d=1;d<=day;d++) if(isWorkday(y,m,d)) n++;
+    return n;
+  }
+
+  // ── Monta histórico: últimos 5 meses + mês atual ───────────
+  const hist = {};
+  for (let i=5; i>=0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const k = d.getFullYear()+'-'+pad(d.getMonth()+1);
+    hist[k] = { label:MONTHS[d.getMonth()]+'/'+String(d.getFullYear()).slice(2),
+                won:0, value:0, entered:0, y:d.getFullYear(), m:d.getMonth() };
+  }
+  wonDeals.forEach(d => {
     if (!d.won_time) return;
-    const t = new Date(d.won_time);
-    const k = t.getFullYear()+'-'+pad(t.getMonth()+1);
-    if (monthData[k]) { monthData[k].count++; monthData[k].value+=parseFloat(d.value)||0; }
+    const k = d.won_time.slice(0,7);
+    if (hist[k]) { hist[k].won++; hist[k].value += parseFloat(d.value)||0; }
+  });
+  sales.forEach(d => {
+    if (!d.add_time) return;
+    const k = d.add_time.slice(0,7);
+    if (hist[k]) hist[k].entered++;
   });
 
-  const realized = Object.values(monthData);
+  const entries = Object.values(hist);
+  const pastEntries = entries.slice(0,-1);   // meses anteriores (completos)
+  const curEntry    = entries[entries.length-1]; // mês atual
 
-  // Projeção baseada na média dos últimos 3 meses
-  const last3 = realized.slice(-3);
-  const avgCount = last3.reduce((s,m)=>s+m.count,0)/Math.max(last3.length,1);
-  const avgValue = last3.reduce((s,m)=>s+m.value,0)/Math.max(last3.length,1);
+  // ── Taxa de conversão média (pipeline) ────────────────────
+  // Usa meses anteriores com entradas para calcular conv rate
+  const convSamples = pastEntries.filter(m => m.entered > 0);
+  const avgConv     = convSamples.length > 0
+    ? convSamples.reduce((s,m) => s + m.won/m.entered, 0) / convSamples.length
+    : 0.1;
 
-  // Ajuste do mês corrente (extrapolação pro-rata)
-  const dayOfMonth = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  const factor = daysInMonth/dayOfMonth;
-  const lastIdx = realized.length-1;
-  const projectedCurrent = Math.round(realized[lastIdx].count * factor);
+  // ── Média mensal de ganhos (últimos 3 meses completos) ─────
+  const last3 = pastEntries.slice(-3);
+  const avgWon = last3.reduce((s,m)=>s+m.won,0) / Math.max(last3.length,1);
+  const avgVal = last3.reduce((s,m)=>s+m.value,0) / Math.max(last3.length,1);
 
-  const labels = realized.map(m=>m.label);
-  const counts = realized.map((m,i) => i<lastIdx ? m.count : null);
-  const projected = realized.map((m,i) => i===lastIdx ? projectedCurrent : null);
+  // ── Projeção mês atual: dias úteis + taxa de conversão ─────
+  const bdTotal   = bDaysInMonth(now.getFullYear(), now.getMonth());
+  const bdElapsed = Math.max(bDaysUntil(now.getFullYear(), now.getMonth(), now.getDate()), 1);
+  const bdFactor  = bdTotal / bdElapsed;
+  // Proj. baseada em ritmo atual (dias úteis)
+  const projCurBD     = Math.round(curEntry.won * bdFactor);
+  // Proj. baseada em entradas do mês × conv rate
+  const projCurConv   = Math.round(curEntry.entered * avgConv);
+  // Média das duas abordagens
+  const projCurFinal  = Math.round((projCurBD + projCurConv) / 2);
 
-  // Próximos 2 meses
-  for (let p = 1; p <= 2; p++) {
+  // ── Projeção futuros: pipeline aberto × conv rate / 3 ──────
+  const projPipeline = Math.round(openDeals.length * avgConv / 3);
+  const projFuture   = Math.max(projPipeline, Math.round(avgWon));
+
+  // ── Valor projetado mês atual ──────────────────────────────
+  const avgTicket = wonDeals.length > 0
+    ? wonDeals.reduce((s,d)=>s+(parseFloat(d.value)||0),0) / wonDeals.length : 0;
+  const projCurValue = Math.round(projCurFinal * avgTicket);
+
+  // ── Monta arrays do gráfico ────────────────────────────────
+  // Cada mês: verde = realizado, azul = projeção
+  // Passados: azul = entradas × conv rate (o que o pipeline indicava)
+  // Atual: azul = proj. dias úteis + conv
+  // Futuros: azul = pipeline × conv
+  const labels     = entries.map(m=>m.label);
+  const realArr    = entries.map(m => m.won);
+  const projArr    = [
+    ...pastEntries.map(m => Math.round(m.entered * avgConv) || Math.round(avgWon)),
+    projCurFinal
+  ];
+
+  // Adiciona próximos 2 meses
+  for (let p=1; p<=2; p++) {
     const d = new Date(now.getFullYear(), now.getMonth()+p, 1);
     labels.push(MONTHS[d.getMonth()]+'/'+String(d.getFullYear()).slice(2));
-    counts.push(null);
-    projected.push(Math.round(avgCount));
+    realArr.push(null);
+    projArr.push(projFuture);
   }
 
   destroyChart('ch-forecast');
@@ -1228,50 +1279,56 @@ function renderForecastChart() {
     data: {
       labels,
       datasets: [
-        { label:'Realizado', data:counts, backgroundColor:'rgba(16,185,129,.8)', borderRadius:4, borderSkipped:false },
-        { label:'Projetado', data:projected, backgroundColor:'rgba(37,99,235,.3)',
-          borderColor:'rgba(37,99,235,.6)', borderWidth:1, borderDash:[4,4], borderRadius:4, borderSkipped:false },
+        { label:'Realizado',  data:realArr, backgroundColor:'rgba(16,185,129,.85)',
+          borderRadius:4, borderSkipped:false, order:1 },
+        { label:'Projeção',   data:projArr, backgroundColor:'rgba(37,99,235,.45)',
+          borderColor:'rgba(37,99,235,.75)', borderWidth:1,
+          borderRadius:4, borderSkipped:false, order:2 },
       ]
     },
     options: chartOptions({ yTitle:'Negócios' })
   });
 
-  // Meta vs Realizado card
-  const thisMonth = realized[lastIdx];
-  const metaPct = METAS.novas_contas > 0 ? Math.min(100, Math.round(thisMonth.count/METAS.novas_contas*100)) : 0;
-  const metaPctProj = METAS.novas_contas > 0 ? Math.min(100, Math.round(projectedCurrent/METAS.novas_contas*100)) : 0;
-  const mLabel = MONTHS[now.getMonth()];
-  document.getElementById('fc-month-label').textContent = mLabel + ' ' + now.getFullYear();
+  // ── Card Meta vs Realizado ─────────────────────────────────
+  const metaPct     = METAS.novas_contas>0 ? Math.min(100,Math.round(curEntry.won/METAS.novas_contas*100)) : 0;
+  const projPct     = METAS.novas_contas>0 ? Math.min(100,Math.round(projCurFinal/METAS.novas_contas*100)) : 0;
+  const mrrPct      = METAS.mrr_mensal>0   ? Math.min(100,Math.round(curEntry.value/METAS.mrr_mensal*100)) : 0;
+  const mrrProjPct  = METAS.mrr_mensal>0   ? Math.min(100,Math.round(projCurValue/METAS.mrr_mensal*100)) : 0;
+  const convPct     = (avgConv*100).toFixed(1);
+
+  document.getElementById('fc-month-label').textContent = MONTHS[now.getMonth()]+' '+now.getFullYear();
   document.getElementById('fc-meta-content').innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:10px">
       <div>
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
           <span style="font-size:12px;color:var(--text2)">Novas Contas</span>
-          <span style="font-size:12px;font-weight:700;color:var(--text)">${thisMonth.count} / ${METAS.novas_contas}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--text)">${curEntry.won} / ${METAS.novas_contas}</span>
         </div>
         <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
           <div style="height:100%;width:${metaPct}%;background:var(--success);border-radius:4px;transition:.4s"></div>
         </div>
-        <div style="font-size:10px;color:var(--text2);margin-top:3px">${metaPct}% realizado · projeção: ${projectedCurrent} (${metaPctProj}%)</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:3px">${metaPct}% realizado · projeção: ${projCurFinal} (${projPct}%) · dias úteis: ${bdElapsed}/${bdTotal}</div>
       </div>
       <div>
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
           <span style="font-size:12px;color:var(--text2)">Receita (MRR)</span>
-          <span style="font-size:12px;font-weight:700;color:var(--text)">R$ ${fmt(thisMonth.value)} / R$ ${fmt(METAS.mrr_mensal)}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--text)">R$ ${fmt(curEntry.value)} / R$ ${fmt(METAS.mrr_mensal)}</span>
         </div>
         <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${Math.min(100,Math.round(thisMonth.value/METAS.mrr_mensal*100))}%;background:var(--primary);border-radius:4px;transition:.4s"></div>
+          <div style="height:100%;width:${mrrPct}%;background:var(--primary);border-radius:4px;transition:.4s"></div>
         </div>
-        <div style="font-size:10px;color:var(--text2);margin-top:3px">${Math.min(100,Math.round(thisMonth.value/METAS.mrr_mensal*100))}% da meta</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:3px">${mrrPct}% realizado · projeção: R$ ${fmt(projCurValue)} (${mrrProjPct}%)</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px">
         <div style="background:var(--bg);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Ticket Médio</div>
-          <div style="font-size:16px;font-weight:800;color:var(--text)">R$ ${fmt(thisMonth.count>0?thisMonth.value/thisMonth.count:0)}</div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Taxa de Conversão</div>
+          <div style="font-size:16px;font-weight:800;color:var(--text)">${convPct}%</div>
+          <div style="font-size:10px;color:var(--text3)">média histórica</div>
         </div>
         <div style="background:var(--bg);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Projeção Mês</div>
-          <div style="font-size:16px;font-weight:800;color:var(--primary)">R$ ${fmt(Math.round(thisMonth.value*factor))}</div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Pipeline Aberto</div>
+          <div style="font-size:16px;font-weight:800;color:var(--primary)">${openDeals.length}</div>
+          <div style="font-size:10px;color:var(--text3)">deals em andamento</div>
         </div>
       </div>
     </div>`;
