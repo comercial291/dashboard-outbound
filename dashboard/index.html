@@ -183,6 +183,7 @@ button{font-family:inherit;cursor:pointer}
 .chart-wrap canvas{max-width:100%}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .grid-65{display:grid;grid-template-columns:2fr 1fr;gap:14px}
 
 /* ═══════════════════════════════════════════════════════════
@@ -268,13 +269,16 @@ tr:hover td{background:var(--primary-lt)}
 /* ═══════════════════════════════════════════════════════════
    RESPONSIVE
 ═══════════════════════════════════════════════════════════ */
+@media(max-width:1200px){
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+}
 @media(max-width:1100px){
   .kpi-row.cols-6{grid-template-columns:repeat(3,1fr)}
   .grid-65{grid-template-columns:1fr}
 }
 @media(max-width:750px){
   .kpi-row.cols-6,.kpi-row.cols-4,.kpi-row.cols-3{grid-template-columns:repeat(2,1fr)}
-  .grid-2,.grid-3{grid-template-columns:1fr}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
   .topbar-title{font-size:14px}
   .content{padding:12px}
 }
@@ -411,32 +415,52 @@ tr:hover td{background:var(--primary-lt)}
       </div>
     </div>
 
-    <!-- Gráficos principais: 3 separados -->
+    <!-- Gráficos principais: 4 em grid -->
     <div class="section-header">
       <div class="section-title">Evolução do Período</div>
       <div style="font-size:11px;color:var(--text2)" id="granularity-label">por semana</div>
     </div>
-    <div class="grid-3" style="margin-bottom:10px">
+    <div class="grid-4" style="margin-bottom:14px">
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--primary)">Novos Leads</div>
-        <div class="chart-wrap" style="height:180px"><canvas id="ch-leads"></canvas></div>
+        <div class="chart-wrap" style="height:160px"><canvas id="ch-leads"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--warning)">Oportunidades</div>
-        <div class="chart-wrap" style="height:180px"><canvas id="ch-opts"></canvas></div>
+        <div class="chart-wrap" style="height:160px"><canvas id="ch-opts"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
-        <div class="chart-wrap" style="height:180px"><canvas id="ch-contas"></canvas></div>
+        <div class="chart-wrap" style="height:160px"><canvas id="ch-contas"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--danger)">Valor Fechado (R$)</div>
+        <div class="chart-wrap" style="height:160px"><canvas id="ch-valor-fechado"></canvas></div>
       </div>
     </div>
-    <!-- Gráfico de Valor Fechado -->
-    <div class="card" style="margin-bottom:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="card-title" style="color:var(--danger)">Valor Fechado (R$)</div>
-        <div style="font-size:11px;color:var(--text2)" id="valor-fechado-label">por mês</div>
+
+    <!-- KPIs de Atividades -->
+    <div class="kpi-row cols-4" style="margin-bottom:18px">
+      <div class="kcard success">
+        <div class="kcard-label">Atividades Realizadas</div>
+        <div class="kcard-value" id="act-done">–</div>
+        <div class="kcard-sub" id="act-done-sub">concluídas no período</div>
       </div>
-      <div class="chart-wrap" style="height:180px"><canvas id="ch-valor-fechado"></canvas></div>
+      <div class="kcard danger">
+        <div class="kcard-label">Atividades Atrasadas</div>
+        <div class="kcard-value" id="act-late">–</div>
+        <div class="kcard-sub" id="act-late-sub">vencidas e não concluídas</div>
+      </div>
+      <div class="kcard warning">
+        <div class="kcard-label">Atividades Pendentes</div>
+        <div class="kcard-value" id="act-pend">–</div>
+        <div class="kcard-sub" id="act-pend-sub">a vencer no período</div>
+      </div>
+      <div class="kcard neutral">
+        <div class="kcard-label">Taxa de Conclusão</div>
+        <div class="kcard-value" id="act-taxa">–</div>
+        <div class="kcard-sub" id="act-taxa-sub">realizadas / total agendadas</div>
+      </div>
     </div>
 
     <!-- Forecast -->
@@ -981,20 +1005,102 @@ function renderVisao() {
   const granMap = { day:'por dia', week:'por semana', month:'por mês' };
   setText('granularity-label', granMap[gran]);
 
+  // KPIs de Atividades
+  renderAtividadesKPI();
+
   // Gráfico principal
   renderMainChart(gran);
   renderForecastChart();
   renderGanhosMes();
 }
 
+function renderAtividadesKPI() {
+  const vid  = STATE.vendor;
+  const from = STATE.fromDate;
+  const to   = STATE.toDate;
+  const today = new Date(); today.setHours(23,59,59,999);
+
+  // Filtra atividades pelo vendedor (user_id) se selecionado
+  const acts = RAW.activities.filter(a => {
+    if (vid !== 'all' && normId(a.user_id) !== normId(vid)) return false;
+    return true;
+  });
+
+  // Realizadas no período: done=true e marked_as_done_time no range
+  const done = acts.filter(a => {
+    if (!a.done) return false;
+    const t = a.marked_as_done_time ? new Date(a.marked_as_done_time) : null;
+    if (!t) return false;
+    if (from && t < from) return false;
+    if (to   && t > to)   return false;
+    return true;
+  });
+
+  // Atrasadas: done=false e due_date < hoje
+  const late = acts.filter(a => {
+    if (a.done) return false;
+    const t = a.due_date ? new Date(a.due_date + 'T23:59:59') : null;
+    return t && t < today;
+  });
+
+  // Pendentes: done=false e due_date no período futuro ou dentro do range
+  const pend = acts.filter(a => {
+    if (a.done) return false;
+    const t = a.due_date ? new Date(a.due_date + 'T00:00:00') : null;
+    if (!t || t < today) return false;
+    if (from && t < from) return false;
+    if (to   && t > to)   return false;
+    return true;
+  });
+
+  const total = done.length + pend.length;
+  const taxa  = total > 0 ? (done.length / total * 100).toFixed(0) + '%' : '–';
+
+  setText('act-done',     done.length);
+  setText('act-done-sub', `concluídas no período`);
+  setText('act-late',     late.length);
+  setText('act-late-sub', `vencidas e não concluídas`);
+  setText('act-pend',     pend.length);
+  setText('act-pend-sub', `a vencer no período`);
+  setText('act-taxa',     taxa);
+  setText('act-taxa-sub', `${done.length} realizadas / ${total} agendadas`);
+}
+
+// Gera sempre 7 períodos terminando em `to`
+function makeLast7Periods(to, gran) {
+  const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const periods = [];
+  for (let i = 6; i >= 0; i--) {
+    let ps, pe, label;
+    if (gran === 'day') {
+      ps = new Date(to); ps.setDate(ps.getDate()-i); ps.setHours(0,0,0,0);
+      pe = new Date(ps); pe.setDate(pe.getDate()+1);
+      label = pad(ps.getDate())+'/'+pad(ps.getMonth()+1);
+    } else if (gran === 'week') {
+      const ref = new Date(to);
+      const dow = ref.getDay();
+      ref.setDate(ref.getDate()-(dow===0?6:dow-1)); ref.setHours(0,0,0,0);
+      ps = new Date(ref); ps.setDate(ps.getDate()-i*7);
+      pe = new Date(ps); pe.setDate(pe.getDate()+7);
+      label = pad(ps.getDate())+'/'+pad(ps.getMonth()+1);
+    } else {
+      ps = new Date(to.getFullYear(), to.getMonth()-i, 1, 0,0,0,0);
+      pe = new Date(ps.getFullYear(), ps.getMonth()+1, 1);
+      label = MONTHS[ps.getMonth()]+'/'+String(ps.getFullYear()).slice(2);
+    }
+    periods.push({ start:ps, end:pe, label });
+  }
+  return periods;
+}
+
 function renderMainChart(gran) {
   const all   = filteredDeals();
   const pre   = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
   const sales = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
-  const from  = STATE.fromDate || new Date(Date.now()-30*86400000);
-  const to    = STATE.toDate   || new Date();
+  const to    = STATE.toDate || new Date();
 
-  const periods = makePeriods(from, to, gran);
+  // Sempre 7 períodos terminando em `to`
+  const periods = makeLast7Periods(to, gran);
   const labels  = periods.map(p=>p.label);
 
   const inP = (d, field, p) => {
@@ -1007,34 +1113,38 @@ function renderMainChart(gran) {
   const optsData   = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
   const contasData = periods.map(p => sales.filter(d=>d.status==='won'&&inP(d,'won_time',p)).length);
 
-  const singleChartOptions = (color) => ({
+  // Cor calculada em runtime para garantir visibilidade no tema claro e escuro
+  const tc  = getComputedStyle(document.documentElement).getPropertyValue('--text').trim()  || '#1e293b';
+  const gc  = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,.06)';
+
+  const singleChartOptions = () => ({
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => items[0].label, label: i => ' ' + i.raw } } },
     scales: {
-      x: { grid: { color: 'var(--chart-grid)' }, ticks: { color: 'var(--text2)', font: { size: 11 } } },
-      y: { grid: { color: 'var(--chart-grid)' }, ticks: { color: 'var(--text2)', font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
+      x: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 } } },
+      y: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
     }
   });
 
   destroyChart('ch-leads');
   CHARTS['ch-leads'] = new Chart(document.getElementById('ch-leads').getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: [{ data: leadsData, backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 4, borderSkipped: false }] },
-    options: singleChartOptions('rgba(37,99,235,.7)')
+    data: { labels, datasets: [{ data: leadsData, backgroundColor: 'rgba(37,99,235,.75)', borderRadius: 4, borderSkipped: false }] },
+    options: singleChartOptions()
   });
 
   destroyChart('ch-opts');
   CHARTS['ch-opts'] = new Chart(document.getElementById('ch-opts').getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: [{ data: optsData, backgroundColor: 'rgba(245,158,11,.7)', borderRadius: 4, borderSkipped: false }] },
-    options: singleChartOptions('rgba(245,158,11,.7)')
+    data: { labels, datasets: [{ data: optsData, backgroundColor: 'rgba(245,158,11,.75)', borderRadius: 4, borderSkipped: false }] },
+    options: singleChartOptions()
   });
 
   destroyChart('ch-contas');
   CHARTS['ch-contas'] = new Chart(document.getElementById('ch-contas').getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: [{ data: contasData, backgroundColor: 'rgba(16,185,129,.8)', borderRadius: 4, borderSkipped: false }] },
-    options: singleChartOptions('rgba(16,185,129,.8)')
+    options: singleChartOptions()
   });
 
   // Gráfico de Valor Fechado (R$) — deals won pelo valor, agrupado pelo período atual
@@ -1051,20 +1161,11 @@ function renderMainChart(gran) {
     responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      tooltip: {
-        callbacks: {
-          title: items => items[0].label,
-          label: i => ' R$ ' + fmt(i.raw)
-        }
-      }
+      tooltip: { callbacks: { title: items => items[0].label, label: i => ' R$ '+fmt(i.raw) } }
     },
     scales: {
-      x: { grid: { color: 'var(--chart-grid)' }, ticks: { color: 'var(--text2)', font: { size: 11 } } },
-      y: {
-        grid: { color: 'var(--chart-grid)' },
-        ticks: { color: 'var(--text2)', font: { size: 11 }, callback: v => 'R$' + fmtK(v) },
-        beginAtZero: true
-      }
+      x: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 } } },
+      y: { grid: { color: gc }, ticks: { color: tc, font: { size: 11 }, callback: v => 'R$'+fmtK(v) }, beginAtZero: true }
     }
   };
 
