@@ -983,11 +983,12 @@ function renderVisao() {
   const lost     = inPeriodSales.filter(d => d.status === 'lost');
   const optsOpen = salesFixed.filter(d => d.status === 'open');   // pipeline atual sem filtro de data
 
-  const wonVal   = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-  const lostVal  = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-  const total    = won.length + lost.length;
-  const conv     = total > 0 ? (won.length/total*100).toFixed(1) : '0.0';
-  const ticket   = won.length > 0 ? wonVal/won.length : 0;
+  const wonVal    = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+  const lostVal   = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+  // Conversão = ganhos / leads recebidos no período (não apenas won+lost)
+  const entered   = dealsInRange(salesFixed, 'add_time').length;
+  const conv      = entered > 0 ? (won.length/entered*100).toFixed(1) : '0.0';
+  const ticket    = won.length > 0 ? wonVal/won.length : 0;
   const ciclo    = won.length > 0
     ? won.reduce((s,d)=>{
         if(d.add_time&&d.won_time) return s+(new Date(d.won_time)-new Date(d.add_time))/86400000;
@@ -1004,7 +1005,7 @@ function renderVisao() {
   setText('k-won',      won.length);
   setText('k-won-sub',  'R$ '+fmt(wonVal));
   setText('k-conv',     conv+'%');
-  setText('k-conv-sub', `${won.length} ganhos / ${total} fechados`);
+  setText('k-conv-sub', `${won.length} ganhos / ${entered} recebidos`);
   setText('k-ticket',   'R$ '+fmt(ticket));
   setText('k-ticket-sub', `Ciclo médio: ${Math.round(ciclo)} dias`);
 
@@ -1519,12 +1520,13 @@ function renderEquipe() {
     const leads  = dealsInRange(oAll,'add_time').length;
     const reu    = dealsInRange(oPre.filter(d=>d.status==='won'),'won_time').length;
     const opts   = oSales.filter(d=>d.status==='open').length;
-    const won    = dealsInRange(oSales.filter(d=>d.status==='won'),'won_time');
-    const lost   = dealsInRange(oSales.filter(d=>d.status==='lost'),'lost_time');
-    const wonVal = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-    const total  = won.length+lost.length;
-    const conv   = total>0 ? (won.length/total*100).toFixed(1)+'%' : '–';
-    const ticket = won.length>0 ? wonVal/won.length : 0;
+    const won       = dealsInRange(oSales.filter(d=>d.status==='won'),'won_time');
+    const lost      = dealsInRange(oSales.filter(d=>d.status==='lost'),'lost_time');
+    const wonVal    = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+    // Conversão = ganhos / leads recebidos (add_time) no período
+    const oEntered  = dealsInRange(oSales,'add_time').length;
+    const conv      = oEntered>0 ? (won.length/oEntered*100).toFixed(1)+'%' : '–';
+    const ticket    = won.length>0 ? wonVal/won.length : 0;
     return { ...o, leads, reu, opts, won:won.length, lost:lost.length, conv, wonVal, ticket };
   }).sort((a,b)=>b.wonVal-a.wonVal);
 
