@@ -1335,71 +1335,50 @@ function renderForecastChart() {
 }
 
 function renderGanhosMes() {
-  const all     = filteredDeals();  // respeita filtro de vendedor e funil
-  const sales   = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'won');
-  const presales= all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID && d.status === 'won');
-  const now     = new Date();
-  const MONTHS  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const all      = filteredDeals();  // respeita filtro de vendedor e funil
+  const sales    = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'won');
+  const presales = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID && d.status === 'won');
+  const to       = STATE.toDate || new Date();
+  const gran     = getGranularity();
 
-  // Monta estrutura dos últimos 12 meses
-  const months = {};
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    const k = d.getFullYear()+'-'+pad(d.getMonth()+1);
-    months[k] = { label: MONTHS[d.getMonth()]+'/'+String(d.getFullYear()).slice(2), count:0, value:0, reunioes:0 };
-  }
+  // Usa os mesmos 7 períodos do período selecionado
+  const periods = makeLast7Periods(to, gran);
+  const labels  = periods.map(p => p.label);
+  const lastIdx = periods.length - 1;
 
-  // Agrupa Sales won por mês de fechamento
-  sales.forEach(d => {
-    if (!d.won_time) return;
-    const k = d.won_time.slice(0,7);
-    if (months[k]) { months[k].count++; months[k].value += parseFloat(d.value)||0; }
-  });
+  const inP = (d, field, p) => {
+    const t = d[field] ? new Date(d[field]) : null;
+    return t && t >= p.start && t < p.end;
+  };
 
-  // Agrupa Presales won (reuniões agendadas) por mês de fechamento
-  presales.forEach(d => {
-    if (!d.won_time) return;
-    const k = d.won_time.slice(0,7);
-    if (months[k]) { months[k].reunioes++; }
-  });
+  // Dados por período — fechados usam won_time
+  const countData   = periods.map(p => sales.filter(d    => inP(d, 'won_time', p)).length);
+  const valueData   = periods.map(p => sales.filter(d    => inP(d, 'won_time', p))
+                                              .reduce((s,d) => s+(parseFloat(d.value)||0), 0));
+  const reunData    = periods.map(p => presales.filter(d => inP(d, 'won_time', p)).length);
 
-  const entries = Object.values(months);
-  const labels  = entries.map(m => m.label);
-  const isLast  = (i) => i === entries.length - 1;
+  const bgCount  = countData.map((_,i)  => i===lastIdx ? 'rgba(16,185,129,.95)' : 'rgba(16,185,129,.55)');
+  const bgValue  = valueData.map((_,i)  => i===lastIdx ? 'rgba(37,99,235,.95)'  : 'rgba(37,99,235,.55)');
+  const bgReun   = reunData.map((_,i)   => i===lastIdx ? 'rgba(245,158,11,.95)' : 'rgba(245,158,11,.55)');
 
-  // Gráfico 1: Negócios Ganhos (Vendas)
   destroyChart('ch-ganhos-mes');
   CHARTS['ch-ganhos-mes'] = new Chart(document.getElementById('ch-ganhos-mes').getContext('2d'), {
     type:'bar',
-    data:{ labels, datasets:[{
-      label:'Ganhos', data:entries.map(m=>m.count),
-      backgroundColor:entries.map((_,i)=>isLast(i)?'rgba(16,185,129,.95)':'rgba(16,185,129,.5)'),
-      borderRadius:4, borderSkipped:false
-    }]},
+    data:{ labels, datasets:[{ label:'Ganhos', data:countData, backgroundColor:bgCount, borderRadius:4, borderSkipped:false }]},
     options:chartOptions({ yTitle:'Negócios' })
   });
 
-  // Gráfico 2: Receita Mensal (MRR)
   destroyChart('ch-mrr-mes');
   CHARTS['ch-mrr-mes'] = new Chart(document.getElementById('ch-mrr-mes').getContext('2d'), {
     type:'bar',
-    data:{ labels, datasets:[{
-      label:'MRR (R$)', data:entries.map(m=>m.value),
-      backgroundColor:entries.map((_,i)=>isLast(i)?'rgba(37,99,235,.95)':'rgba(37,99,235,.5)'),
-      borderRadius:4, borderSkipped:false
-    }]},
+    data:{ labels, datasets:[{ label:'MRR (R$)', data:valueData, backgroundColor:bgValue, borderRadius:4, borderSkipped:false }]},
     options:chartOptions({ yTitle:'R$', money:true })
   });
 
-  // Gráfico 3: Reuniões Agendadas (Pré-Vendas won)
   destroyChart('ch-reunioes-mes');
   CHARTS['ch-reunioes-mes'] = new Chart(document.getElementById('ch-reunioes-mes').getContext('2d'), {
     type:'bar',
-    data:{ labels, datasets:[{
-      label:'Reuniões', data:entries.map(m=>m.reunioes),
-      backgroundColor:entries.map((_,i)=>isLast(i)?'rgba(245,158,11,.95)':'rgba(245,158,11,.5)'),
-      borderRadius:4, borderSkipped:false
-    }]},
+    data:{ labels, datasets:[{ label:'Reuniões', data:reunData, backgroundColor:bgReun, borderRadius:4, borderSkipped:false }]},
     options:chartOptions({ yTitle:'Reuniões' })
   });
 }
