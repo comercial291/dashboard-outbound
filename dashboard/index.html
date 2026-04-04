@@ -734,15 +734,23 @@ function populateVendorFilter() {
   const sel = document.getElementById('f-vendor');
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos os vendedores</option>';
-  const owners = [...new Map(RAW.deals.map(d => [d.owner_id, d.owner_name])).entries()];
-  owners.sort((a,b) => (a[1]||'').localeCompare(b[1]||''));
+
+  // Monta mapa id→nome: prioriza RAW.users, complementa com owner_name dos deals
+  const nameMap = {};
+  RAW.users.forEach(u => { if (u.id && u.name) nameMap[u.id] = u.name; });
+  RAW.deals.forEach(d => { if (d.owner_id && d.owner_name && !nameMap[d.owner_id]) nameMap[d.owner_id] = d.owner_name; });
+
+  // Só mostra usuários que têm pelo menos 1 deal
+  const idsWithDeals = new Set(RAW.deals.map(d => d.owner_id).filter(Boolean));
+  const owners = Object.entries(nameMap)
+    .filter(([id]) => idsWithDeals.has(Number(id)) || idsWithDeals.has(String(id)))
+    .sort((a,b) => a[1].localeCompare(b[1]));
+
   owners.forEach(([id, name]) => {
-    if (id && name) {
-      const opt = document.createElement('option');
-      opt.value = id; opt.textContent = name;
-      if (id == cur) opt.selected = true;
-      sel.appendChild(opt);
-    }
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = name;
+    if (id == cur) opt.selected = true;
+    sel.appendChild(opt);
   });
 }
 
