@@ -351,11 +351,7 @@ tr:hover td{background:var(--primary-lt)}
     <button class="period-btn" data-period="7d">7d</button>
     <button class="period-btn" data-period="15d">15d</button>
     <button class="period-btn active" data-period="30d">30d</button>
-    <button class="period-btn" data-period="90d">90d</button>
-    <button class="period-btn" data-period="6m">6m</button>
-    <button class="period-btn" data-period="1a">1a</button>
     <button class="period-btn" data-period="mes">Este mês</button>
-    <button class="period-btn" data-period="ano">Este ano</button>
     <button class="period-btn period-btn-custom" data-period="custom" id="btn-custom" title="Período personalizado">⊞</button>
   </div>
   <div class="filter-group" id="custom-range">
@@ -394,7 +390,7 @@ tr:hover td{background:var(--primary-lt)}
 
     <!-- Resultados do Período -->
     <div class="section-header"><div class="section-title">Resultados do Período</div></div>
-    <div class="kpi-row cols-5" id="kpi-results">
+    <div class="kpi-row cols-6" id="kpi-results">
       <div class="kcard" style="border-top:3px solid var(--primary)">
         <div class="kcard-label">Reunião Agendada</div>
         <div class="kcard-value" id="r-won-pre">–</div>
@@ -409,6 +405,11 @@ tr:hover td{background:var(--primary-lt)}
         <div class="kcard-label">Valor Fechado no Período</div>
         <div class="kcard-value small" id="r-valor">–</div>
         <div class="kcard-sub" id="r-valor-sub">receita gerada no período</div>
+      </div>
+      <div class="kcard warning">
+        <div class="kcard-label">No-Show</div>
+        <div class="kcard-value" id="r-noshow">–</div>
+        <div class="kcard-sub" id="r-noshow-sub">Taxa: 0% · Reuniões: 0</div>
       </div>
       <div class="kcard danger">
         <div class="kcard-label">Negócios Perdidos</div>
@@ -614,8 +615,10 @@ tr:hover td{background:var(--primary-lt)}
 <script>
 // ─── CONFIGURAÇÃO ──────────────────────────────────────────────────────────────
 const WEBAPP_URL = '/sheets-proxy';
-const PRESALES_PIPELINE_ID = 1;
-const SALES_PIPELINE_ID    = 2;
+const PRESALES_PIPELINE_ID   = 1;
+const SALES_PIPELINE_ID      = 2;
+const NO_SHOW_STAGE_ID       = 58; // "NoShow - Novo Agendamento" (Vendas)
+const SALES_MEETING_STAGE_ID = 7;  // "Reunião Agendada" (Vendas)
 
 // ─── META MENSAL (ajuste conforme suas metas) ─────────────────────────────────
 const METAS = {
@@ -900,8 +903,8 @@ function getGranularity() {
   const days = STATE.fromDate && STATE.toDate
     ? (STATE.toDate - STATE.fromDate) / 86400000
     : 30;
-  if (days <= 14)  return 'day';
-  if (days <= 89)  return 'week';
+  if (days <= 31)  return 'day';
+  if (days <= 90)  return 'week';
   return 'month';
 }
 
@@ -1019,6 +1022,16 @@ function renderVisao() {
   setText('r-ticket', 'R$ '+fmt(ticket));
   setText('r-ticket-sub', `Conversão: ${conv}% · Ciclo: ${Math.round(ciclo)} dias`);
 
+  // No-Show: deals na etapa 58 (Sales), filtrado por vendor + período (add_time)
+  const noShowDeals      = salesFixed.filter(d => normId(d.stage_id) == NO_SHOW_STAGE_ID);
+  const noShowInPeriod   = dealsInRange(noShowDeals, 'add_time');
+  const salesInPeriod    = dealsInRange(salesFixed, 'add_time');
+  const taxaNoShow       = salesInPeriod.length > 0
+    ? (noShowInPeriod.length / salesInPeriod.length * 100).toFixed(1) + '%'
+    : '0%';
+  setText('r-noshow', noShowInPeriod.length);
+  setText('r-noshow-sub', `Taxa: ${taxaNoShow} · Base: ${salesInPeriod.length}`);
+
   // Granularidade e rótulo
   const gran = getGranularity();
   const granMap = { day:'por dia', week:'por semana', month:'por mês' };
@@ -1040,36 +1053,38 @@ function renderAtividadesKPI() {
   const today = new Date(); today.setHours(23,59,59,999);
 
   // Filtra atividades pelo vendedor (user_id) se selecionado
+  // Compara também com owner_id dos deals para cobrir mapeamentos alternativos
   const acts = RAW.activities.filter(a => {
-    if (vid !== 'all' && normId(a.user_id) !== normId(vid)) return false;
-    return true;
+    if (vid === 'all') return true;
+    const uid = normId(a.user_id);
+    if (!uid) return false;
+    return uid === normId(vid);
   });
 
-  // Realizadas no período: done=true e marked_as_done_time no range
+  // Realizadas no período: done=true, usa marked_as_done_time ou due_date como fallback
   const done = acts.filter(a => {
-    if (!a.done) return false;
-    const t = a.marked_as_done_time ? new Date(a.marked_as_done_time) : null;
+    if (a.done !== true && a.done !== 1) return false;
+    const t = a.marked_as_done_time
+      ? new Date(a.marked_as_done_time)
+      : (a.due_date ? new Date(a.due_date + 'T12:00:00') : null);
     if (!t) return false;
     if (from && t < from) return false;
     if (to   && t > to)   return false;
     return true;
   });
 
-  // Atrasadas: done=false e due_date < hoje
+  // Atrasadas: done=false e due_date < hoje (sem filtro de período)
   const late = acts.filter(a => {
-    if (a.done) return false;
+    if (a.done === true || a.done === 1) return false;
     const t = a.due_date ? new Date(a.due_date + 'T23:59:59') : null;
     return t && t < today;
   });
 
-  // Pendentes: done=false e due_date no período futuro ou dentro do range
+  // Pendentes: done=false e due_date >= hoje (mostra todos os pendentes futuros)
   const pend = acts.filter(a => {
-    if (a.done) return false;
+    if (a.done === true || a.done === 1) return false;
     const t = a.due_date ? new Date(a.due_date + 'T00:00:00') : null;
-    if (!t || t < today) return false;
-    if (from && t < from) return false;
-    if (to   && t > to)   return false;
-    return true;
+    return t && t >= today;
   });
 
   const total = done.length + pend.length;
@@ -1112,14 +1127,52 @@ function makeLast7Periods(to, gran) {
   return periods;
 }
 
-function renderMainChart(gran) {
-  const all   = filteredDeals();
-  const pre   = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
-  const sales = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
-  const to    = STATE.toDate || new Date();
+// Gera períodos cobrindo exatamente o intervalo from→to
+function makePeriodsForRange(from, to, gran) {
+  if (!from) return makeLast7Periods(to, gran);
+  const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const periods = [];
+  let cur = new Date(from);
+  if (gran === 'day') {
+    cur.setHours(0,0,0,0);
+  } else if (gran === 'week') {
+    const dow = cur.getDay();
+    cur.setDate(cur.getDate() - (dow===0?6:dow-1));
+    cur.setHours(0,0,0,0);
+  } else {
+    cur = new Date(cur.getFullYear(), cur.getMonth(), 1, 0,0,0,0);
+  }
+  while (cur <= to && periods.length < 35) {
+    let ps = new Date(cur), pe, label;
+    if (gran === 'day') {
+      pe = new Date(ps); pe.setDate(pe.getDate()+1);
+      label = pad(ps.getDate())+'/'+pad(ps.getMonth()+1);
+    } else if (gran === 'week') {
+      pe = new Date(ps); pe.setDate(pe.getDate()+7);
+      label = pad(ps.getDate())+'/'+pad(ps.getMonth()+1);
+    } else {
+      pe = new Date(ps.getFullYear(), ps.getMonth()+1, 1);
+      label = MONTHS[ps.getMonth()]+'/'+String(ps.getFullYear()).slice(2);
+    }
+    periods.push({ start:ps, end:pe, label });
+    cur = new Date(pe);
+  }
+  return periods.length ? periods : makeLast7Periods(to, gran);
+}
 
-  // Sempre 7 períodos terminando em `to`
-  const periods = makeLast7Periods(to, gran);
+function renderMainChart(gran) {
+  // Sempre Vendas — isolado por vendedor, ignora filtro de funil
+  const vid   = STATE.vendor;
+  const sales = RAW.deals.filter(d => {
+    if (d.pipeline_id != SALES_PIPELINE_ID) return false;
+    if (vid !== 'all' && normId(d.owner_id) !== normId(vid)) return false;
+    return true;
+  });
+  const to   = STATE.toDate || new Date();
+  const from = STATE.fromDate;
+
+  // Períodos cobrindo exatamente o intervalo selecionado
+  const periods = makePeriodsForRange(from, to, gran);
   const labels  = periods.map(p=>p.label);
 
   const inP = (d, field, p) => {
@@ -1127,9 +1180,9 @@ function renderMainChart(gran) {
     return t && t>=p.start && t<p.end;
   };
 
-  // Novos leads → add_time; Oportunidades (entradas no funil) → add_time; Novas Contas (won) → won_time
-  const leadsData  = periods.map(p => [...pre,...sales].filter(d=>inP(d,'add_time',p)).length);
-  const optsData   = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
+  // Novos Leads, Oportunidades, Novas Contas — todos via Sales pipeline
+  const leadsData  = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
+  const optsData   = periods.map(p => sales.filter(d=>d.status==='open'&&inP(d,'add_time',p)).length);
   const contasData = periods.map(p => sales.filter(d=>d.status==='won'&&inP(d,'won_time',p)).length);
 
   // Cor calculada em runtime para garantir visibilidade no tema claro e escuro
@@ -1169,8 +1222,13 @@ function renderMainChart(gran) {
 }
 
 function renderForecastChart() {
-  const allDeals  = filteredDeals();
-  const sales     = allDeals.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  // Forecast: SEMPRE pipeline de Vendas, isolado por vendedor (ignora filtro de funil)
+  const vid2    = STATE.vendor;
+  const sales   = RAW.deals.filter(d => {
+    if (d.pipeline_id != SALES_PIPELINE_ID) return false;
+    if (vid2 !== 'all' && normId(d.owner_id) !== normId(vid2)) return false;
+    return true;
+  });
   const wonDeals  = sales.filter(d => d.status === 'won');
   const openDeals = sales.filter(d => d.status === 'open');
   const now       = new Date();
@@ -1326,14 +1384,16 @@ function renderForecastChart() {
 }
 
 function renderGanhosMes() {
-  const all      = filteredDeals();  // respeita filtro de vendedor e funil
-
-  // Sales: respeita filtro de funil normalmente
-  const sales    = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID && d.status === 'won');
+  // Sales: SEMPRE pipeline de Vendas, isolado por vendedor (ignora filtro de funil)
+  const vid   = STATE.vendor;
+  const sales = RAW.deals.filter(d => {
+    if (d.pipeline_id != SALES_PIPELINE_ID) return false;
+    if (d.status !== 'won') return false;
+    if (vid !== 'all' && normId(d.owner_id) !== normId(vid)) return false;
+    return true;
+  });
 
   // Reuniões (Pré-Vendas): SEMPRE do pipeline de Pré-Vendas, só aplica filtro de vendedor
-  // (ignora filtro de funil para não sumir quando "Vendas" estiver selecionado)
-  const vid = STATE.vendor;
   const presales = RAW.deals.filter(d => {
     if (d.pipeline_id != PRESALES_PIPELINE_ID) return false;
     if (d.status !== 'won') return false;
@@ -1341,10 +1401,11 @@ function renderGanhosMes() {
     return true;
   });
   const to       = STATE.toDate || new Date();
+  const from     = STATE.fromDate;
   const gran     = getGranularity();
 
-  // Usa os mesmos 7 períodos do período selecionado
-  const periods = makeLast7Periods(to, gran);
+  // Períodos cobrindo exatamente o intervalo selecionado
+  const periods = makePeriodsForRange(from, to, gran);
   const labels  = periods.map(p => p.label);
   const lastIdx = periods.length - 1;
 
