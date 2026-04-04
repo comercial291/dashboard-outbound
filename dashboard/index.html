@@ -394,13 +394,24 @@ tr:hover td{background:var(--primary-lt)}
       <div class="kcard"><div class="kcard-label">Ticket Médio (Ganhos)</div><div class="kcard-value small" id="r-ticket">–</div><div class="kcard-sub" id="r-ticket-sub">Conversão: 0% · Ciclo: – dias</div></div>
     </div>
 
-    <!-- Gráfico principal: Novos Leads / Oportunidades / Novas Contas -->
+    <!-- Gráficos principais: 3 separados -->
     <div class="section-header">
-      <div class="section-title">Novos Leads · Oportunidades · Novas Contas</div>
+      <div class="section-title">Evolução do Período</div>
       <div style="font-size:11px;color:var(--text2)" id="granularity-label">por semana</div>
     </div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="chart-wrap" style="height:280px"><canvas id="ch-main"></canvas></div>
+    <div class="grid-3" style="margin-bottom:14px">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--primary)">Novos Leads</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="ch-leads"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--warning)">Oportunidades</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="ch-opts"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="ch-contas"></canvas></div>
+      </div>
     </div>
 
     <!-- Forecast -->
@@ -892,18 +903,34 @@ function renderMainChart(gran) {
   const optsData  = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
   const contasData= periods.map(p => sales.filter(d=>d.status==='won'&&inP(d,'won_time',p)).length);
 
-  destroyChart('ch-main');
-  CHARTS['ch-main'] = new Chart(document.getElementById('ch-main').getContext('2d'), {
+  const singleChartOptions = (color) => ({
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => items[0].label, label: i => ' ' + i.raw } } },
+    scales: {
+      x: { grid: { color: 'var(--chart-grid)' }, ticks: { color: 'var(--text2)', font: { size: 11 } } },
+      y: { grid: { color: 'var(--chart-grid)' }, ticks: { color: 'var(--text2)', font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
+    }
+  });
+
+  destroyChart('ch-leads');
+  CHARTS['ch-leads'] = new Chart(document.getElementById('ch-leads').getContext('2d'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label:'Novos Leads',   data:leadsData,  backgroundColor:'rgba(37,99,235,.7)',  borderRadius:4, borderSkipped:false },
-        { label:'Oportunidades', data:optsData,   backgroundColor:'rgba(245,158,11,.7)', borderRadius:4, borderSkipped:false },
-        { label:'Novas Contas',  data:contasData, backgroundColor:'rgba(16,185,129,.8)', borderRadius:4, borderSkipped:false },
-      ]
-    },
-    options: chartOptions({ stacked:false, yTitle:'Quantidade' })
+    data: { labels, datasets: [{ data: leadsData, backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 4, borderSkipped: false }] },
+    options: singleChartOptions('rgba(37,99,235,.7)')
+  });
+
+  destroyChart('ch-opts');
+  CHARTS['ch-opts'] = new Chart(document.getElementById('ch-opts').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: optsData, backgroundColor: 'rgba(245,158,11,.7)', borderRadius: 4, borderSkipped: false }] },
+    options: singleChartOptions('rgba(245,158,11,.7)')
+  });
+
+  destroyChart('ch-contas');
+  CHARTS['ch-contas'] = new Chart(document.getElementById('ch-contas').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: contasData, backgroundColor: 'rgba(16,185,129,.8)', borderRadius: 4, borderSkipped: false }] },
+    options: singleChartOptions('rgba(16,185,129,.8)')
   });
 }
 
