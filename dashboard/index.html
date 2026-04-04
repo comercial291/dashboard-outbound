@@ -116,6 +116,8 @@ button{font-family:inherit;cursor:pointer}
 .period-btn{background:var(--bg);border:1px solid var(--border);color:var(--text2);
   border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;transition:.15s}
 .period-btn.active,.period-btn:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+.period-btn-custom{font-size:14px;padding:3px 8px;border-style:dashed}
+.period-btn-custom.active{background:var(--warning);border-color:var(--warning);border-style:solid}
 .btn-apply{background:var(--primary);color:#fff;border:none;border-radius:8px;
   padding:7px 18px;font-size:12px;font-weight:700;font-family:inherit;transition:.15s}
 .btn-apply:hover{filter:brightness(1.1)}
@@ -326,7 +328,7 @@ tr:hover td{background:var(--primary-lt)}
 <div class="filter-bar">
   <div class="filter-group">
     <span class="filter-label">Funil</span>
-    <select class="filter-select" id="f-pipeline">
+    <select class="filter-select" id="f-pipeline" onchange="applyFilters()">
       <option value="all">Todos</option>
       <option value="presales">Pré-Vendas</option>
       <option value="sales">Vendas</option>
@@ -334,20 +336,10 @@ tr:hover td{background:var(--primary-lt)}
   </div>
   <div class="filter-group">
     <span class="filter-label">Vendedor</span>
-    <select class="filter-select" id="f-vendor">
+    <select class="filter-select" id="f-vendor" onchange="applyFilters()">
       <option value="all">Todos os vendedores</option>
     </select>
   </div>
-  <div class="filter-sep"></div>
-  <div class="filter-group">
-    <span class="filter-label">De</span>
-    <input type="date" class="filter-input" id="f-from"/>
-  </div>
-  <div class="filter-group">
-    <span class="filter-label">Até</span>
-    <input type="date" class="filter-input" id="f-to"/>
-  </div>
-  <button class="btn-apply" onclick="applyFilters()">Aplicar</button>
   <div class="filter-sep"></div>
   <div class="period-btns" id="period-btns">
     <button class="period-btn" data-period="7d">7d</button>
@@ -358,6 +350,13 @@ tr:hover td{background:var(--primary-lt)}
     <button class="period-btn" data-period="1a">1a</button>
     <button class="period-btn" data-period="mes">Este mês</button>
     <button class="period-btn" data-period="ano">Este ano</button>
+    <button class="period-btn period-btn-custom" data-period="custom" id="btn-custom" title="Período personalizado">⊞</button>
+  </div>
+  <div class="filter-group custom-range" id="custom-range" style="display:none">
+    <span class="filter-label">De</span>
+    <input type="date" class="filter-input" id="f-from" onchange="applyCustomDates()"/>
+    <span class="filter-label" style="margin-left:8px">Até</span>
+    <input type="date" class="filter-input" id="f-to" onchange="applyCustomDates()"/>
   </div>
 </div>
 
@@ -636,10 +635,43 @@ function initPeriodButtons() {
       document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       STATE.period = btn.dataset.period;
-      applyPeriod(STATE.period);
-      renderAll();
+      const customRange = document.getElementById('custom-range');
+      if (btn.dataset.period === 'custom') {
+        customRange.style.display = 'flex';
+        // Se já há datas preenchidas nos inputs, aplica; senão não re-renderiza
+        const fv = document.getElementById('f-from').value;
+        const tv = document.getElementById('f-to').value;
+        if (fv && tv) {
+          STATE.fromDate = new Date(fv + 'T00:00:00');
+          STATE.toDate   = new Date(tv + 'T23:59:59');
+          STATE.vendor   = document.getElementById('f-vendor').value;
+          STATE.pipeline = document.getElementById('f-pipeline').value;
+          renderAll();
+        }
+      } else {
+        customRange.style.display = 'none';
+        applyPeriod(STATE.period);
+        STATE.vendor   = document.getElementById('f-vendor').value;
+        STATE.pipeline = document.getElementById('f-pipeline').value;
+        renderAll();
+      }
     });
   });
+}
+
+function applyCustomDates() {
+  const fv = document.getElementById('f-from').value;
+  const tv = document.getElementById('f-to').value;
+  if (!fv || !tv) return;
+  // Ativa botão custom
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-custom').classList.add('active');
+  STATE.period   = 'custom';
+  STATE.fromDate = new Date(fv + 'T00:00:00');
+  STATE.toDate   = new Date(tv + 'T23:59:59');
+  STATE.vendor   = document.getElementById('f-vendor').value;
+  STATE.pipeline = document.getElementById('f-pipeline').value;
+  renderAll();
 }
 
 function applyPeriod(period) {
