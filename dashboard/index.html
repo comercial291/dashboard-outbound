@@ -352,12 +352,13 @@ tr:hover td{background:var(--primary-lt)}
     <button class="period-btn" data-period="ano">Este ano</button>
     <button class="period-btn period-btn-custom" data-period="custom" id="btn-custom" title="Período personalizado">⊞</button>
   </div>
-  <div class="filter-group custom-range" id="custom-range" style="display:none">
+  <div class="filter-group" id="custom-range">
     <span class="filter-label">De</span>
     <input type="date" class="filter-input" id="f-from" onchange="applyCustomDates()"/>
     <span class="filter-label" style="margin-left:8px">Até</span>
     <input type="date" class="filter-input" id="f-to" onchange="applyCustomDates()"/>
   </div>
+  <button class="btn-apply" onclick="applyFilters()">Aplicar</button>
 </div>
 
 <!-- ── TABS ───────────────────────────────────────────────────────────────────── -->
@@ -635,26 +636,21 @@ function initPeriodButtons() {
       document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       STATE.period = btn.dataset.period;
-      const customRange = document.getElementById('custom-range');
       if (btn.dataset.period === 'custom') {
-        customRange.style.display = 'flex';
-        // Se já há datas preenchidas nos inputs, aplica; senão não re-renderiza
+        // Usa as datas dos inputs como estão
         const fv = document.getElementById('f-from').value;
         const tv = document.getElementById('f-to').value;
         if (fv && tv) {
           STATE.fromDate = new Date(fv + 'T00:00:00');
           STATE.toDate   = new Date(tv + 'T23:59:59');
-          STATE.vendor   = document.getElementById('f-vendor').value;
-          STATE.pipeline = document.getElementById('f-pipeline').value;
-          renderAll();
         }
       } else {
-        customRange.style.display = 'none';
+        // Período pré-definido: calcula datas e atualiza os inputs
         applyPeriod(STATE.period);
-        STATE.vendor   = document.getElementById('f-vendor').value;
-        STATE.pipeline = document.getElementById('f-pipeline').value;
-        renderAll();
       }
+      STATE.vendor   = document.getElementById('f-vendor').value;
+      STATE.pipeline = document.getElementById('f-pipeline').value;
+      renderAll();
     });
   });
 }
@@ -820,10 +816,8 @@ function populateVendorFilter() {
 
 // ─── FILTER HELPERS ───────────────────────────────────────────────────────────
 function filteredDeals() {
-  const from = STATE.fromDate;
-  const to   = STATE.toDate;
-  const vid  = STATE.vendor;
-  const pl   = STATE.pipeline;
+  const vid = STATE.vendor;
+  const pl  = STATE.pipeline;
   return RAW.deals.filter(d => {
     if (vid !== 'all' && normId(d.owner_id) !== normId(vid)) return false;
     if (pl === 'presales' && d.pipeline_id != PRESALES_PIPELINE_ID) return false;
@@ -838,6 +832,25 @@ function dealsInRange(deals, dateField) {
   return deals.filter(d => {
     const t = d[dateField] ? new Date(d[dateField]) : null;
     if (!t) return false;
+    if (from && t < from) return false;
+    if (to   && t > to)   return false;
+    return true;
+  });
+}
+
+// Filtra deals pelo período usando a data correta:
+// - won/lost → data de fechamento (won_time / lost_time / close_time)
+// - abertos / todos → data de abertura (add_time)
+function dealsInRangeSmart(deals) {
+  return deals.filter(d => {
+    let dateField;
+    if (d.status === 'won')  dateField = d.won_time  ? 'won_time'  : 'close_time';
+    else if (d.status === 'lost') dateField = d.lost_time ? 'lost_time' : 'close_time';
+    else                     dateField = 'add_time';
+    const t = d[dateField] ? new Date(d[dateField]) : null;
+    if (!t) return false;
+    const from = STATE.fromDate;
+    const to   = STATE.toDate;
     if (from && t < from) return false;
     if (to   && t > to)   return false;
     return true;
@@ -906,11 +919,13 @@ function renderVisao() {
   const pre   = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
   const sales = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
 
-  const leads    = dealsInRange(all,   'add_time');
-  const reunioes = dealsInRange(pre.filter(d=>d.status==='won'), 'won_time');
-  const won      = dealsInRange(sales.filter(d=>d.status==='won'), 'won_time');
-  const lost     = dealsInRange(sales.filter(d=>d.status==='lost'), 'lost_time');
-  const optsOpen = sales.filter(d=>d.status==='open');
+  // Fechados → data de fechamento; abertos → data de abertura
+  const inPeriod = dealsInRangeSmart(all);
+  const leads    = dealsInRange(all, 'add_time');          // novos leads criados no período
+  const reunioes = inPeriod.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID && d.status === 'won');
+  const won      = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'won');
+  const lost     = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'lost');
+  const optsOpen = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID    && d.status === 'open');
 
   const wonVal   = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
   const lostVal  = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
@@ -975,9 +990,10 @@ function renderMainChart(gran) {
     return t && t>=p.start && t<p.end;
   };
 
-  const leadsData = periods.map(p => [...pre,...sales].filter(d=>inP(d,'add_time',p)).length);
-  const optsData  = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
-  const contasData= periods.map(p => sales.filter(d=>d.status==='won'&&inP(d,'won_time',p)).length);
+  // Novos leads → add_time; Oportunidades (entradas no funil) → add_time; Novas Contas (won) → won_time
+  const leadsData  = periods.map(p => [...pre,...sales].filter(d=>inP(d,'add_time',p)).length);
+  const optsData   = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
+  const contasData = periods.map(p => sales.filter(d=>d.status==='won'&&inP(d,'won_time',p)).length);
 
   const singleChartOptions = (color) => ({
     responsive: true, maintainAspectRatio: false,
