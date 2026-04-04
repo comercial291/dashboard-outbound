@@ -423,26 +423,6 @@ tr:hover td{background:var(--primary-lt)}
       </div>
     </div>
 
-    <!-- Gráficos principais: 4 em grid -->
-    <div class="section-header">
-      <div class="section-title">Evolução do Período</div>
-      <div style="font-size:11px;color:var(--text2)" id="granularity-label">por semana</div>
-    </div>
-    <div class="grid-3" style="margin-bottom:14px">
-      <div class="card">
-        <div class="card-title" style="margin-bottom:8px;color:var(--primary)">Novos Leads</div>
-        <div class="chart-wrap" style="height:180px"><canvas id="ch-leads"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:8px;color:var(--warning)">Oportunidades</div>
-        <div class="chart-wrap" style="height:180px"><canvas id="ch-opts"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
-        <div class="chart-wrap" style="height:180px"><canvas id="ch-contas"></canvas></div>
-      </div>
-    </div>
-
     <!-- KPIs de Atividades -->
     <div class="kpi-row cols-4" style="margin-bottom:18px">
       <div class="kcard success">
@@ -464,6 +444,26 @@ tr:hover td{background:var(--primary-lt)}
         <div class="kcard-label">Taxa de Conclusão</div>
         <div class="kcard-value" id="act-taxa">–</div>
         <div class="kcard-sub" id="act-taxa-sub">realizadas / total agendadas</div>
+      </div>
+    </div>
+
+    <!-- Gráficos principais: 4 em grid -->
+    <div class="section-header">
+      <div class="section-title">Evolução do Período</div>
+      <div style="font-size:11px;color:var(--text2)" id="granularity-label">por semana</div>
+    </div>
+    <div class="grid-3" style="margin-bottom:14px">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--primary)">Novos Leads</div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-leads"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--warning)">Oportunidades</div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-opts"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
+        <div class="chart-wrap" style="height:180px"><canvas id="ch-contas"></canvas></div>
       </div>
     </div>
 
