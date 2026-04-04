@@ -388,10 +388,27 @@ tr:hover td{background:var(--primary-lt)}
 
     <!-- Resultados do Período -->
     <div class="section-header"><div class="section-title">Resultados do Período</div></div>
-    <div class="kpi-row cols-3" id="kpi-results">
-      <div class="kcard success"><div class="kcard-label">Negócios Ganhos</div><div class="kcard-value" id="r-won">–</div><div class="kcard-sub" id="r-won-sub">Valor: R$ 0,00 · Ticket: R$ 0,00</div></div>
-      <div class="kcard danger"><div class="kcard-label">Negócios Perdidos</div><div class="kcard-value" id="r-lost">–</div><div class="kcard-sub" id="r-lost-sub">Valor: R$ 0,00</div></div>
-      <div class="kcard"><div class="kcard-label">Ticket Médio (Ganhos)</div><div class="kcard-value small" id="r-ticket">–</div><div class="kcard-sub" id="r-ticket-sub">Conversão: 0% · Ciclo: – dias</div></div>
+    <div class="kpi-row cols-4" id="kpi-results">
+      <div class="kcard" style="border-top:3px solid var(--primary)">
+        <div class="kcard-label">Ganhos — Pré-Vendas</div>
+        <div class="kcard-value" id="r-won-pre">–</div>
+        <div class="kcard-sub" id="r-won-pre-sub">Reuniões agendadas no período</div>
+      </div>
+      <div class="kcard success">
+        <div class="kcard-label">Ganhos — Vendas</div>
+        <div class="kcard-value" id="r-won">–</div>
+        <div class="kcard-sub" id="r-won-sub">Valor: R$ 0,00 · Ticket: R$ 0,00</div>
+      </div>
+      <div class="kcard danger">
+        <div class="kcard-label">Negócios Perdidos</div>
+        <div class="kcard-value" id="r-lost">–</div>
+        <div class="kcard-sub" id="r-lost-sub">Valor: R$ 0,00</div>
+      </div>
+      <div class="kcard">
+        <div class="kcard-label">Ticket Médio (Vendas)</div>
+        <div class="kcard-value small" id="r-ticket">–</div>
+        <div class="kcard-sub" id="r-ticket-sub">Conversão: 0% · Ciclo: – dias</div>
+      </div>
     </div>
 
     <!-- Gráficos principais: 3 separados -->
@@ -873,7 +890,11 @@ function renderVisao() {
   setText('k-ticket',   'R$ '+fmt(ticket));
   setText('k-ticket-sub', `Ciclo médio: ${Math.round(ciclo)} dias`);
 
-  // Resultados
+  // Resultados — Pré-Vendas (ganhos = reuniões agendadas)
+  setText('r-won-pre', reunioes.length);
+  setText('r-won-pre-sub', `Reuniões agendadas no período`);
+
+  // Resultados — Vendas
   setText('r-won',  won.length);
   setText('r-won-sub', `Valor: R$ ${fmt(wonVal)} · Ticket: R$ ${fmt(ticket)}`);
   setText('r-lost', lost.length);
