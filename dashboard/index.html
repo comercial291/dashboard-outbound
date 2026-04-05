@@ -1536,10 +1536,12 @@ function renderFunnelViz(containerId, stages, deals) {
   }
 
   const openByStage = stages.map(s => deals.filter(d => d.stage_id == s.id && d.status === 'open').length);
-  const maxCount    = Math.max(...openByStage, 1);
 
-  // Largura de cada faixa: proporcional à contagem (mín 22%, máx 100%)
-  const widths = openByStage.map(c => Math.max(22, Math.round(c / maxCount * 78) + 22));
+  // Largura SEMPRE decrescente (cone) — de 100% no topo até 18% na base
+  const n = stages.length;
+  const widths = stages.map((_, i) =>
+    Math.round(100 - (i / Math.max(n - 1, 1)) * 82)
+  );
 
   // Taxa de conversão etapa → próxima
   const convRates = stages.map((_, i) => {
