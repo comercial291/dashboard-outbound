@@ -1474,14 +1474,14 @@ function renderGanhosMes() {
 function renderFunil() {
   // Funil: SEMPRE mostra ambos pipelines — aplica filtro de vendedor e data (add_time)
   const vid = STATE.vendor;
+  // Funil mostra TODOS os deals abertos atuais — filtro só por vendedor
+  // (filtro de data não se aplica ao pipeline ativo: deals abertos não têm data de fechamento)
   const byVendor = RAW.deals.filter(d =>
     vid === 'all' || normId(d.owner_id) === normId(vid)
   );
-  // Aplica filtro de data pela data de criação do deal
-  const inPeriod = dealsInRange(byVendor, 'add_time');
 
-  const pre   = inPeriod.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
-  const sales = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  const pre   = byVendor.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
+  const sales = byVendor.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
 
   const preStages   = RAW.stages.filter(s=>s.pipeline_id==PRESALES_PIPELINE_ID).sort((a,b)=>a.order_nr-b.order_nr);
   const salesStages = RAW.stages.filter(s=>s.pipeline_id==SALES_PIPELINE_ID).sort((a,b)=>a.order_nr-b.order_nr);
@@ -1501,8 +1501,9 @@ function renderFunil() {
     }
   });
 
-  const preCounts   = preStages.map(s => pre.filter(d=>d.stage_id==s.id&&d.status==='open').length);
-  const salesCounts = salesStages.map(s => sales.filter(d=>d.stage_id==s.id&&d.status==='open').length);
+  // Distribuição usa deals abertos (sem filtro de data — mesma base do funil)
+  const preCounts   = preStages.map(s => pre.filter(d=>normId(d.stage_id)==normId(s.id)&&d.status==='open').length);
+  const salesCounts = salesStages.map(s => sales.filter(d=>normId(d.stage_id)==normId(s.id)&&d.status==='open').length);
 
   destroyChart('ch-funil-dist-pre');
   CHARTS['ch-funil-dist-pre'] = new Chart(document.getElementById('ch-funil-dist-pre').getContext('2d'), {
@@ -1535,7 +1536,7 @@ function renderFunnelViz(containerId, stages, deals) {
     return;
   }
 
-  const openByStage = stages.map(s => deals.filter(d => d.stage_id == s.id && d.status === 'open').length);
+  const openByStage = stages.map(s => deals.filter(d => normId(d.stage_id) == normId(s.id) && d.status === 'open').length);
 
   // Largura SEMPRE decrescente (cone) — de 100% no topo até 18% na base
   const n = stages.length;
