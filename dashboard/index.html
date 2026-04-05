@@ -380,12 +380,12 @@ tr:hover td{background:var(--primary-lt)}
   <div class="tab-panel active" id="tab-visao">
     <!-- KPIs principais -->
     <div class="kpi-row cols-6" id="kpi-visao">
-      <div class="kcard"><div class="kcard-label">Total de Leads</div><div class="kcard-value" id="k-leads">–</div><div class="kcard-sub" id="k-leads-sub">criados no período</div></div>
+      <div class="kcard"><div class="kcard-label">Leads Recebidos</div><div class="kcard-value" id="k-leads">–</div><div class="kcard-sub" id="k-leads-sub">entradas em Vendas</div></div>
       <div class="kcard success"><div class="kcard-label">Reuniões Agendadas</div><div class="kcard-value" id="k-reunioes">–</div><div class="kcard-sub" id="k-reunioes-sub">Pré-Vendas ganhos</div></div>
       <div class="kcard warning"><div class="kcard-label">Oportunidades</div><div class="kcard-value" id="k-opts">–</div><div class="kcard-sub" id="k-opts-sub">em aberto (Vendas)</div></div>
       <div class="kcard success"><div class="kcard-label">Ganhos</div><div class="kcard-value small" id="k-won">–</div><div class="kcard-sub" id="k-won-sub">R$ 0,00</div></div>
-      <div class="kcard"><div class="kcard-label">Taxa de Conversão</div><div class="kcard-value" id="k-conv">–</div><div class="kcard-sub" id="k-conv-sub">ganhos / total fechados</div></div>
-      <div class="kcard neutral"><div class="kcard-label">Ticket Médio</div><div class="kcard-value small" id="k-ticket">–</div><div class="kcard-sub" id="k-ticket-sub">Ciclo médio: – dias</div></div>
+      <div class="kcard"><div class="kcard-label">Taxa de Conversão</div><div class="kcard-value" id="k-conv">–</div><div class="kcard-sub" id="k-conv-sub">ganhos / recebidos</div></div>
+      <div class="kcard neutral"><div class="kcard-label">Ciclo Médio</div><div class="kcard-value" id="k-ticket">–</div><div class="kcard-sub" id="k-ticket-sub">dias até fechar</div></div>
     </div>
 
     <!-- Resultados do Período -->
@@ -417,7 +417,7 @@ tr:hover td{background:var(--primary-lt)}
         <div class="kcard-sub" id="r-lost-sub">Valor: R$ 0,00</div>
       </div>
       <div class="kcard">
-        <div class="kcard-label">Ticket Médio (Vendas)</div>
+        <div class="kcard-label">Ticket Médio</div>
         <div class="kcard-value small" id="r-ticket">–</div>
         <div class="kcard-sub" id="r-ticket-sub">Conversão: 0% · Ciclo: – dias</div>
       </div>
@@ -467,6 +467,23 @@ tr:hover td{background:var(--primary-lt)}
       </div>
     </div>
 
+    <!-- Ganhos por Mês -->
+    <div class="section-header"><div class="section-title">Ganhos por Mês</div></div>
+    <div class="grid-3" style="margin-bottom:14px">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;color:var(--success)">Negócios Ganhos (Vendas)</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="ch-ganhos-mes"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;color:var(--primary)">Receita Mensal (MRR)</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="ch-mrr-mes"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;color:var(--warning)">Reuniões Agendadas (Pré-Vendas)</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="ch-reunioes-mes"></canvas></div>
+      </div>
+    </div>
+
     <!-- Forecast -->
     <div class="section-header">
       <div class="section-title">Forecast — Previsão de Fechamento</div>
@@ -487,23 +504,6 @@ tr:hover td{background:var(--primary-lt)}
           </div>
         </div>
         <div id="fc-meta-content" style="padding-top:8px"></div>
-      </div>
-    </div>
-
-    <!-- Ganhos por Mês -->
-    <div class="section-header"><div class="section-title">Ganhos por Mês</div></div>
-    <div class="grid-3" style="margin-bottom:14px">
-      <div class="card">
-        <div class="card-title" style="margin-bottom:12px;color:var(--success)">Negócios Ganhos (Vendas)</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-ganhos-mes"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:12px;color:var(--primary)">Receita Mensal (MRR)</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-mrr-mes"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:12px;color:var(--warning)">Reuniões Agendadas (Pré-Vendas)</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-reunioes-mes"></canvas></div>
       </div>
     </div>
   </div>
@@ -977,16 +977,17 @@ function renderVisao() {
   const inPeriodPre   = dealsInRangeSmart(preFixed);
   const inPeriod      = dealsInRangeSmart(all);
 
-  const leads    = dealsInRange(all, 'add_time');
-  const reunioes = inPeriodPre.filter(d => d.status === 'won');   // SEMPRE Pré-Vendas
+  const leads    = dealsInRange(salesFixed, 'add_time');
+  // Reuniões Agendadas = ganhos do pipeline de Pré-Vendas no período
+  const reunioes = inPeriodPre.filter(d => d.status === 'won');
   const won      = inPeriodSales.filter(d => d.status === 'won'); // SEMPRE Vendas
   const lost     = inPeriodSales.filter(d => d.status === 'lost');
   const optsOpen = salesFixed.filter(d => d.status === 'open');   // pipeline atual sem filtro de data
 
   const wonVal    = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
   const lostVal   = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-  // Conversão = ganhos / leads recebidos no período (não apenas won+lost)
-  const entered   = dealsInRange(salesFixed, 'add_time').length;
+  // Conversão = ganhos / leads recebidos no período (Sales pipeline, add_time)
+  const entered   = leads.length;  // leads já é dealsInRange(salesFixed, 'add_time')
   const conv      = entered > 0 ? (won.length/entered*100).toFixed(1) : '0.0';
   const ticket    = won.length > 0 ? wonVal/won.length : 0;
   const ciclo    = won.length > 0
@@ -997,7 +998,7 @@ function renderVisao() {
 
   // KPIs
   setText('k-leads',    leads.length);
-  setText('k-leads-sub','criados no período');
+  setText('k-leads-sub','entradas em Vendas no período');
   setText('k-reunioes', reunioes.length);
   setText('k-reunioes-sub', 'via Pré-Vendas');
   setText('k-opts',     optsOpen.length);
@@ -1006,8 +1007,8 @@ function renderVisao() {
   setText('k-won-sub',  'R$ '+fmt(wonVal));
   setText('k-conv',     conv+'%');
   setText('k-conv-sub', `${won.length} ganhos / ${entered} recebidos`);
-  setText('k-ticket',   'R$ '+fmt(ticket));
-  setText('k-ticket-sub', `Ciclo médio: ${Math.round(ciclo)} dias`);
+  setText('k-ticket',   Math.round(ciclo) + ' dias');
+  setText('k-ticket-sub', `ticket médio: R$ ${fmt(ticket)}`);
 
   // Resultados — Pré-Vendas (ganhos = reuniões agendadas)
   setText('r-won-pre', reunioes.length);
@@ -1344,7 +1345,12 @@ function renderForecastChart() {
   const projPct     = METAS.novas_contas>0 ? Math.min(100,Math.round(projCurFinal/METAS.novas_contas*100)) : 0;
   const mrrPct      = METAS.mrr_mensal>0   ? Math.min(100,Math.round(curEntry.value/METAS.mrr_mensal*100)) : 0;
   const mrrProjPct  = METAS.mrr_mensal>0   ? Math.min(100,Math.round(projCurValue/METAS.mrr_mensal*100)) : 0;
-  const convPct     = (avgConv*100).toFixed(1);
+  // Taxa de conversão do período filtrado (ganhos / entradas no período)
+  const periodEntered = dealsInRange(sales.filter(d => true), 'add_time').length;
+  const periodWon     = dealsInRangeSmart(wonDeals).length;
+  const convPct = periodEntered > 0
+    ? (periodWon / periodEntered * 100).toFixed(1)
+    : (avgConv*100).toFixed(1);
 
   document.getElementById('fc-month-label').textContent = MONTHS[now.getMonth()]+' '+now.getFullYear();
   document.getElementById('fc-meta-content').innerHTML = `
