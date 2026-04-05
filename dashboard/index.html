@@ -902,10 +902,12 @@ function dealsInRange(deals, dateField) {
 // - abertos / todos → data de abertura (add_time)
 function dealsInRangeSmart(deals) {
   return deals.filter(d => {
+    // Deals abertos não têm data de fechamento — não filtrar por data
+    if (d.status === 'open') return true;
+    // Fechados: filtrar pela data de fechamento (won_time / lost_time)
     let dateField;
     if (d.status === 'won')  dateField = d.won_time  ? 'won_time'  : 'close_time';
-    else if (d.status === 'lost') dateField = d.lost_time ? 'lost_time' : 'close_time';
-    else                     dateField = 'add_time';
+    else                     dateField = d.lost_time ? 'lost_time' : 'close_time';
     const t = d[dateField] ? new Date(d[dateField]) : null;
     if (!t) return false;
     const from = STATE.fromDate;
