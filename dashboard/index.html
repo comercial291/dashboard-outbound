@@ -208,16 +208,23 @@ button{font-family:inherit;cursor:pointer}
 /* ═══════════════════════════════════════════════════════════
    FUNNEL
 ═══════════════════════════════════════════════════════════ */
-.funnel-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0}
-.funnel-stage{display:flex;align-items:center;gap:12px;width:100%;max-width:580px}
-.funnel-bar-wrap{flex:1;position:relative}
-.funnel-bar{height:36px;border-radius:6px;display:flex;align-items:center;
-  padding:0 12px;font-size:13px;font-weight:700;color:#fff;transition:width .6s ease}
-.funnel-meta{width:160px;text-align:right}
-.funnel-meta-count{font-size:15px;font-weight:700;color:var(--text)}
-.funnel-meta-pct{font-size:11px;color:var(--text2)}
-.funnel-label{width:160px;font-size:12px;font-weight:600;color:var(--text2)}
-.funnel-conv{font-size:10px;color:var(--text3);margin-top:2px}
+/* ── Funil V2 – Trapézio ── */
+.funnel-wrap{padding:8px 0}
+.funnel-v2{display:flex;gap:28px;align-items:flex-start}
+.funnel-v2-bands{flex:1;display:flex;flex-direction:column;gap:3px}
+.funnel-v2-band{height:56px;display:flex;align-items:center;justify-content:center;
+  cursor:default;transition:filter .15s}
+.funnel-v2-band:hover{filter:brightness(1.12)}
+.funnel-v2-count{color:#fff;font-weight:700;font-size:13px;
+  text-shadow:0 1px 4px rgba(0,0,0,.5);pointer-events:none;user-select:none}
+.funnel-v2-legend{width:210px;display:flex;flex-direction:column}
+.funnel-v2-item{height:59px;display:flex;flex-direction:column;justify-content:center;
+  border-left:2px solid var(--border);padding-left:12px}
+.funnel-v2-name{font-weight:700;font-size:13px;color:var(--text);line-height:1.3}
+.funnel-v2-rate{font-size:12px;font-weight:600;margin-top:3px}
+.funnel-v2-gargalo{display:inline-block;font-size:10px;font-weight:700;
+  background:#ef4444;color:#fff;padding:1px 5px;border-radius:3px;
+  margin-left:5px;vertical-align:middle}
 
 /* ═══════════════════════════════════════════════════════════
    TABLE
@@ -510,17 +517,27 @@ tr:hover td{background:var(--primary-lt)}
 
   <!-- ══════════════════ TAB: FUNIL ══════════════════ -->
   <div class="tab-panel" id="tab-funil">
-    <div class="section-header"><div class="section-title">Funil de Pré-Vendas</div></div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="funnel-wrap" id="funnel-presales"></div>
-    </div>
-    <div class="section-header"><div class="section-title">Funil de Vendas</div></div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="funnel-wrap" id="funnel-sales"></div>
-    </div>
-    <div class="section-header"><div class="section-title">Distribuição por Etapa</div></div>
-    <div class="card">
-      <div class="chart-wrap" style="height:260px"><canvas id="ch-funil-dist"></canvas></div>
+    <div class="grid-2" style="margin-bottom:14px">
+      <div>
+        <div class="section-header"><div class="section-title">Funil — Pré-Vendas</div></div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="funnel-wrap" id="funnel-presales"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:10px;font-size:12px;color:var(--text2)">Distribuição por Etapa</div>
+          <div class="chart-wrap" style="height:180px"><canvas id="ch-funil-dist-pre"></canvas></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-header"><div class="section-title">Funil — Vendas</div></div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="funnel-wrap" id="funnel-sales"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:10px;font-size:12px;color:var(--text2)">Distribuição por Etapa</div>
+          <div class="chart-wrap" style="height:180px"><canvas id="ch-funil-dist-sales"></canvas></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1455,59 +1472,116 @@ function renderGanhosMes() {
 
 // ─── TAB: FUNIL ───────────────────────────────────────────────────────────────
 function renderFunil() {
-  const all   = filteredDeals();
-  const pre   = all.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
-  const sales = all.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  // Funil: SEMPRE mostra ambos pipelines — aplica filtro de vendedor e data (add_time)
+  const vid = STATE.vendor;
+  const byVendor = RAW.deals.filter(d =>
+    vid === 'all' || normId(d.owner_id) === normId(vid)
+  );
+  // Aplica filtro de data pela data de criação do deal
+  const inPeriod = dealsInRange(byVendor, 'add_time');
+
+  const pre   = inPeriod.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
+  const sales = inPeriod.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
 
   const preStages   = RAW.stages.filter(s=>s.pipeline_id==PRESALES_PIPELINE_ID).sort((a,b)=>a.order_nr-b.order_nr);
   const salesStages = RAW.stages.filter(s=>s.pipeline_id==SALES_PIPELINE_ID).sort((a,b)=>a.order_nr-b.order_nr);
 
-  renderFunnelViz('funnel-presales', preStages,   pre,   [
-    'rgba(99,102,241,.75)','rgba(139,92,246,.75)','rgba(168,85,247,.75)'
-  ]);
-  renderFunnelViz('funnel-sales',    salesStages, sales, [
-    'rgba(37,99,235,.75)','rgba(59,130,246,.75)','rgba(6,182,212,.75)','rgba(16,185,129,.75)'
-  ]);
+  renderFunnelViz('funnel-presales', preStages,   pre);
+  renderFunnelViz('funnel-sales',    salesStages, sales);
 
-  // Distribution bar chart
-  const allStages = [...preStages, ...salesStages];
-  const stageCounts = allStages.map(s => all.filter(d=>d.stage_id==s.id&&d.status==='open').length);
-  destroyChart('ch-funil-dist');
-  CHARTS['ch-funil-dist'] = new Chart(document.getElementById('ch-funil-dist').getContext('2d'), {
+  // Distribuição por Etapa — dois gráficos separados
+  const tc = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1e293b';
+  const gc = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,.06)';
+  const barOpts = (title) => ({
+    responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: i => ' '+i.raw+' deals' } } },
+    scales:{
+      x:{ grid:{color:gc}, ticks:{color:tc,font:{size:10}}, beginAtZero:true },
+      y:{ grid:{color:gc}, ticks:{color:tc,font:{size:10}} }
+    }
+  });
+
+  const preCounts   = preStages.map(s => pre.filter(d=>d.stage_id==s.id&&d.status==='open').length);
+  const salesCounts = salesStages.map(s => sales.filter(d=>d.stage_id==s.id&&d.status==='open').length);
+
+  destroyChart('ch-funil-dist-pre');
+  CHARTS['ch-funil-dist-pre'] = new Chart(document.getElementById('ch-funil-dist-pre').getContext('2d'), {
     type:'bar',
-    data:{ labels:allStages.map(s=>s.name), datasets:[{
-      label:'Deals em Aberto', data:stageCounts,
-      backgroundColor:allStages.map((_,i)=>`hsla(${210+i*15},70%,55%,.75)`),
+    data:{ labels:preStages.map(s=>s.name), datasets:[{
+      data:preCounts,
+      backgroundColor:preStages.map((_,i)=>`hsla(${260+i*22},65%,58%,.8)`),
       borderRadius:4, borderSkipped:false
     }]},
-    options:{ ...chartOptions({yTitle:'Deals'}), indexAxis:'y' }
+    options: barOpts('Pré-Vendas')
+  });
+
+  destroyChart('ch-funil-dist-sales');
+  CHARTS['ch-funil-dist-sales'] = new Chart(document.getElementById('ch-funil-dist-sales').getContext('2d'), {
+    type:'bar',
+    data:{ labels:salesStages.map(s=>s.name), datasets:[{
+      data:salesCounts,
+      backgroundColor:salesStages.map((_,i)=>`hsla(${200+i*22},70%,55%,.8)`),
+      borderRadius:4, borderSkipped:false
+    }]},
+    options: barOpts('Vendas')
   });
 }
 
-function renderFunnelViz(containerId, stages, deals, colors) {
+function renderFunnelViz(containerId, stages, deals) {
   const el = document.getElementById(containerId);
   el.innerHTML = '';
-  const openByStage = stages.map(s => deals.filter(d=>d.stage_id==s.id&&d.status==='open').length);
-  const maxCount = Math.max(...openByStage, 1);
-  stages.forEach((stage, i) => {
-    const count = openByStage[i];
-    const prevCount = i===0 ? count : openByStage[i-1];
-    const pct = prevCount>0 ? Math.round(count/prevCount*100) : (i===0?100:0);
-    const barWidth = Math.max(15, Math.round(count/maxCount*100));
-    const color = colors[i % colors.length];
-    el.innerHTML += `
-      <div class="funnel-stage">
-        <div class="funnel-label">${stage.name}<div class="funnel-conv">${i>0?pct+'% conv.':''}</div></div>
-        <div class="funnel-bar-wrap">
-          <div class="funnel-bar" style="width:${barWidth}%;background:${color}">${count>0?count:''}</div>
-        </div>
-        <div class="funnel-meta">
-          <div class="funnel-meta-count">${count}</div>
-          <div class="funnel-meta-pct">${i>0?pct+'%':''}</div>
-        </div>
-      </div>`;
+  if (!stages.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Sem etapas</div></div>';
+    return;
+  }
+
+  const openByStage = stages.map(s => deals.filter(d => d.stage_id == s.id && d.status === 'open').length);
+  const maxCount    = Math.max(...openByStage, 1);
+
+  // Largura de cada faixa: proporcional à contagem (mín 22%, máx 100%)
+  const widths = openByStage.map(c => Math.max(22, Math.round(c / maxCount * 78) + 22));
+
+  // Taxa de conversão etapa → próxima
+  const convRates = stages.map((_, i) => {
+    if (i === stages.length - 1) return null;
+    const curr = openByStage[i], next = openByStage[i + 1];
+    return curr > 0 ? Math.round(next / curr * 100) : 0;
   });
-  if (!stages.length) el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Sem etapas</div></div>';
+
+  // Gargalo: menor taxa de conversão
+  let minRate = Infinity, bottleneckIdx = -1;
+  convRates.forEach((r, i) => {
+    if (r !== null && openByStage[i] > 0 && r < minRate) { minRate = r; bottleneckIdx = i; }
+  });
+
+  const PALETTE = ['#4A90D9','#F5A623','#1ABC9C','#9B59B6','#E74C3C','#3498DB','#E67E22','#8BC34A','#2ECC71','#E91E63'];
+
+  let html = '<div class="funnel-v2"><div class="funnel-v2-bands">';
+  stages.forEach((stage, i) => {
+    const topW = widths[i];
+    const botW = i < stages.length - 1 ? widths[i + 1] : Math.max(14, topW - 8);
+    const lt = (100 - topW) / 2, rt = lt + topW;
+    const lb = (100 - botW) / 2, rb = lb + botW;
+    const col = PALETTE[i % PALETTE.length];
+    html += `<div class="funnel-v2-band"
+        style="clip-path:polygon(${lt}% 0%,${rt}% 0%,${rb}% 100%,${lb}% 100%);background:${col}"
+        title="${stage.name}: ${openByStage[i]} deals">
+      <span class="funnel-v2-count">${openByStage[i]} deals</span>
+    </div>`;
+  });
+
+  html += '</div><div class="funnel-v2-legend">';
+  stages.forEach((stage, i) => {
+    const rate = convRates[i];
+    const isBot = i === bottleneckIdx;
+    const rateColor = rate === null ? 'var(--text3)' : rate >= 50 ? '#10b981' : rate >= 25 ? '#f59e0b' : '#ef4444';
+    html += `<div class="funnel-v2-item">
+      <div class="funnel-v2-name">${stage.name}${isBot ? ' <span class="funnel-v2-gargalo">△ Gargalo</span>' : ''}</div>
+      <div class="funnel-v2-rate" style="color:${rateColor}">${rate !== null ? rate + '% conv.' : ''}</div>
+    </div>`;
+  });
+  html += '</div></div>';
+  el.innerHTML = html;
 }
 
 // ─── TAB: EQUIPE ──────────────────────────────────────────────────────────────
