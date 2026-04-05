@@ -1538,7 +1538,26 @@ function renderFunnelViz(containerId, stages, deals) {
     return;
   }
 
-  const openByStage = stages.map(s => deals.filter(d => normId(d.stage_id) == normId(s.id) && d.status === 'open').length);
+  // Deals abertos em cada etapa (exibido nas faixas)
+  const openByStage = stages.map(s =>
+    deals.filter(d => normId(d.stage_id) == normId(s.id) && d.status === 'open').length
+  );
+
+  // Coorte: mapa etapa_id → índice de ordem
+  const stageOrder = {};
+  stages.forEach((s, i) => { stageOrder[normId(s.id)] = i; });
+
+  // cohort[i] = deals que chegaram na etapa i ou avançaram além
+  // (open/lost no estágio atual; won contam até o estágio onde fecharam)
+  const cohortByStage = stages.map((_, stageIdx) =>
+    deals.filter(d => {
+      const dIdx = stageOrder[normId(d.stage_id)];
+      // Won sem estágio reconhecido → considerar no último estágio (completou o funil)
+      const effectiveIdx = (dIdx === undefined && d.status === 'won')
+        ? stages.length - 1 : dIdx;
+      return effectiveIdx !== undefined && effectiveIdx >= stageIdx;
+    }).length
+  );
 
   // Largura SEMPRE decrescente (cone) — de 100% no topo até 18% na base
   const n = stages.length;
@@ -1546,17 +1565,18 @@ function renderFunnelViz(containerId, stages, deals) {
     Math.round(100 - (i / Math.max(n - 1, 1)) * 82)
   );
 
-  // Taxa de conversão etapa → próxima
+  // Taxa de conversão coorte: cohort[i+1] / cohort[i] — sempre ≤ 100%
   const convRates = stages.map((_, i) => {
     if (i === stages.length - 1) return null;
-    const curr = openByStage[i], next = openByStage[i + 1];
-    return curr > 0 ? Math.round(next / curr * 100) : 0;
+    return cohortByStage[i] > 0
+      ? Math.round(cohortByStage[i + 1] / cohortByStage[i] * 100)
+      : null;
   });
 
   // Gargalo: menor taxa de conversão
   let minRate = Infinity, bottleneckIdx = -1;
   convRates.forEach((r, i) => {
-    if (r !== null && openByStage[i] > 0 && r < minRate) { minRate = r; bottleneckIdx = i; }
+    if (r !== null && r < minRate) { minRate = r; bottleneckIdx = i; }
   });
 
   const PALETTE = ['#4A90D9','#F5A623','#1ABC9C','#9B59B6','#E74C3C','#3498DB','#E67E22','#8BC34A','#2ECC71','#E91E63'];
