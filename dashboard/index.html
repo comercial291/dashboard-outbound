@@ -397,17 +397,14 @@ tr:hover td{background:var(--primary-lt)}
 
     <!-- Resultados do Período -->
     <div class="section-header"><div class="section-title">Resultados do Período</div></div>
-    <div class="kpi-row cols-6" id="kpi-results">
+    <div class="kpi-row cols-5" id="kpi-results">
       <div class="kcard" style="border-top:3px solid var(--primary)">
         <div class="kcard-label">Reunião Agendada</div>
         <div class="kcard-value" id="r-won-pre">–</div>
         <div class="kcard-sub" id="r-won-pre-sub">Pré-Vendas ganhos no período</div>
       </div>
-      <div class="kcard success">
-        <div class="kcard-label">Ganhos — Vendas</div>
-        <div class="kcard-value" id="r-won">–</div>
-        <div class="kcard-sub" id="r-won-sub">Ticket: R$ 0,00</div>
-      </div>
+      <div id="r-won" style="display:none"></div>
+      <div id="r-won-sub" style="display:none"></div>
       <div class="kcard success">
         <div class="kcard-label">Valor Fechado no Período</div>
         <div class="kcard-value small" id="r-valor">–</div>
@@ -469,7 +466,7 @@ tr:hover td{background:var(--primary-lt)}
         <div class="chart-wrap" style="height:180px"><canvas id="ch-opts"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title" style="margin-bottom:8px;color:var(--success)">Novas Contas</div>
+        <div class="card-title" style="margin-bottom:8px;color:var(--danger,#ef4444)">Negócios Perdidos</div>
         <div class="chart-wrap" style="height:180px"><canvas id="ch-contas"></canvas></div>
       </div>
     </div>
@@ -1201,10 +1198,10 @@ function renderMainChart(gran) {
     return t && t>=p.start && t<p.end;
   };
 
-  // Novos Leads, Oportunidades, Novas Contas — todos via Sales pipeline
+  // Novos Leads (add_time), Oportunidades (open/add_time), Perdidos (lost_time)
   const leadsData  = periods.map(p => sales.filter(d=>inP(d,'add_time',p)).length);
   const optsData   = periods.map(p => sales.filter(d=>d.status==='open'&&inP(d,'add_time',p)).length);
-  const contasData = periods.map(p => sales.filter(d=>d.status==='won'&&inP(d,'won_time',p)).length);
+  const contasData = periods.map(p => sales.filter(d=>d.status==='lost'&&inP(d,'lost_time',p)).length);
 
   // Cor calculada em runtime para garantir visibilidade no tema claro e escuro
   const tc  = getComputedStyle(document.documentElement).getPropertyValue('--text').trim()  || '#1e293b';
@@ -1236,7 +1233,7 @@ function renderMainChart(gran) {
   destroyChart('ch-contas');
   CHARTS['ch-contas'] = new Chart(document.getElementById('ch-contas').getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: [{ data: contasData, backgroundColor: 'rgba(16,185,129,.8)', borderRadius: 4, borderSkipped: false }] },
+    data: { labels, datasets: [{ data: contasData, backgroundColor: 'rgba(239,68,68,.75)', borderRadius: 4, borderSkipped: false }] },
     options: singleChartOptions()
   });
 
