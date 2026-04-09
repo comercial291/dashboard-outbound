@@ -146,8 +146,10 @@ def _norm_deal(d: dict, pipeline_id: int, stages_map: dict) -> dict:
         "add_time":              d.get("add_time", ""),
         "update_time":           d.get("update_time", ""),
         "close_time":            d.get("close_time", ""),
-        "won_time":              d.get("won_time", ""),
-        "lost_time":             d.get("lost_time", ""),
+        # Garante que won_time / lost_time sempre tem valor para deals fechados:
+        # fallback para close_time → update_time (Pipedrive às vezes não popula o campo específico)
+        "won_time":  d.get("won_time")  or (d.get("close_time")  if d.get("status") == "won"  else "") or "",
+        "lost_time": d.get("lost_time") or (d.get("close_time")  if d.get("status") == "lost" else "") or "",
         "lost_reason":           d.get("lost_reason", ""),
         "expected_close_date":   d.get("expected_close_date", ""),
         "weighted_value":        float(d.get("weighted_value") or 0),

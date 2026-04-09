@@ -601,50 +601,83 @@ tr:hover td{background:var(--primary-lt)}
   <!-- ══════════════════ TAB: EQUIPE ══════════════════ -->
   <div class="tab-panel" id="tab-equipe">
 
-    <!-- 1. Alertas -->
-    <div class="section-header"><div class="section-title">Alertas do Time</div></div>
-    <div class="eq-alerts" id="eq-alerts-container">
-      <div style="color:var(--text2);font-size:13px">Carregando…</div>
-    </div>
-
-    <!-- 2. Ranking / Scorecard -->
-    <div class="section-header"><div class="section-title">Ranking de Performance</div></div>
-    <div class="eq-scorecard" id="eq-scorecard-container"></div>
-
-    <!-- 3. Comparativo (Charts) -->
-    <div class="section-header"><div class="section-title">Comparativo do Time</div></div>
-    <div class="grid-3" style="margin-bottom:18px">
-      <div class="card">
-        <div class="card-title" style="margin-bottom:10px;color:var(--success)">Negócios Ganhos</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-eq-won"></canvas></div>
+    <!-- KPIs do Time -->
+    <div class="kpi-row cols-4" style="margin-bottom:18px">
+      <div class="kcard">
+        <div class="kcard-label">Conversão Pré-Vendas</div>
+        <div class="kcard-value" id="eq-k-pre-conv">–</div>
+        <div class="kcard-sub" id="eq-k-pre-conv-sub">reuniões / leads</div>
       </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:10px;color:var(--primary)">Taxa de Conversão %</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-eq-conv"></canvas></div>
+      <div class="kcard success">
+        <div class="kcard-label">Conversão Vendas</div>
+        <div class="kcard-value" id="eq-k-sales-conv">–</div>
+        <div class="kcard-sub" id="eq-k-sales-conv-sub">ganhos / leads</div>
       </div>
-      <div class="card">
-        <div class="card-title" style="margin-bottom:10px;color:var(--warning)">Pipeline Ativo (R$)</div>
-        <div class="chart-wrap" style="height:200px"><canvas id="ch-eq-mrr"></canvas></div>
+      <div class="kcard danger">
+        <div class="kcard-label">Taxa de No-Show</div>
+        <div class="kcard-value" id="eq-k-noshow">–</div>
+        <div class="kcard-sub" id="eq-k-noshow-sub">no-shows / reuniões</div>
+      </div>
+      <div class="kcard warning">
+        <div class="kcard-label">Pipeline Ativo</div>
+        <div class="kcard-value small" id="eq-k-pipe">–</div>
+        <div class="kcard-sub" id="eq-k-pipe-sub">deals em aberto</div>
       </div>
     </div>
 
-    <!-- 4. Meta vs Realizado -->
-    <div class="section-header"><div class="section-title">Meta vs. Realizado — Ganhos no Período</div></div>
-    <div class="eq-meta-grid" id="eq-meta-container"></div>
+    <!-- Taxa de Conversão por Consultor -->
+    <div class="section-header"><div class="section-title">Taxa de Conversão por Consultor</div></div>
+    <div class="grid-2" style="margin-bottom:14px">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:10px;color:var(--primary)">Pré-Vendas — Leads → Reuniões Agendadas</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="ch-eq-conv-pre"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:10px;color:var(--success)">Vendas — Leads Recebidos → Ganhos</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="ch-eq-conv-sales"></canvas></div>
+      </div>
+    </div>
 
-    <!-- 5. Tabela de Performance -->
-    <div class="section-header"><div class="section-title">Tabela de Performance</div></div>
+    <!-- No-Show -->
+    <div class="section-header"><div class="section-title">Análise de No-Show — Reuniões Agendadas vs. No-Show</div></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="chart-wrap" style="height:210px"><canvas id="ch-eq-noshow"></canvas></div>
+    </div>
+
+    <!-- Pipeline por Etapa -->
+    <div class="section-header"><div class="section-title">Pipeline Ativo por Etapa — Funil de Vendas (R$)</div></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="chart-wrap" style="height:250px"><canvas id="ch-eq-pipeline"></canvas></div>
+    </div>
+
+    <!-- Motivos de Perda por Consultor -->
+    <div class="section-header"><div class="section-title">Motivos de Perda por Consultor</div></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="chart-wrap" style="height:220px" id="eq-lost-wrap"><canvas id="ch-eq-lost"></canvas></div>
+    </div>
+
+    <!-- Tabela de Performance -->
+    <div class="section-header"><div class="section-title">Tabela de Performance por Vendedor</div></div>
     <div class="card">
       <div class="table-wrap">
         <table id="tbl-equipe">
           <thead><tr>
-            <th>#</th><th>Vendedor</th><th>Leads</th><th>Reuniões</th>
-            <th>Ganhos</th><th>Perdidos</th><th>Conversão</th>
-            <th>Receita</th><th>Ticket Médio</th><th>No-Show</th><th>Atividades</th>
+            <th>Vendedor</th>
+            <th>Leads Pré-V.</th><th>Reuniões</th><th>Conv. Pré-V.</th>
+            <th>Leads V.</th><th>Ganhos</th><th>Perdidos</th><th>Conv. V.</th>
+            <th>Receita</th><th>Ticket Médio</th>
+            <th>Reun. Agend.</th><th>No-Show (%)</th>
           </tr></thead>
           <tbody id="tbody-equipe"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- hidden stubs para destroyChart não quebrar ao trocar de aba -->
+    <div style="display:none">
+      <canvas id="ch-eq-won"></canvas>
+      <canvas id="ch-eq-conv"></canvas>
+      <canvas id="ch-eq-mrr"></canvas>
     </div>
 
   </div>
@@ -969,8 +1002,9 @@ function filteredDeals() {
 function dealsInRange(deals, dateField) {
   const from = STATE.fromDate;
   const to   = STATE.toDate;
+  if (!from && !to) return deals;
   return deals.filter(d => {
-    const t = d[dateField] ? new Date(d[dateField]) : null;
+    const t = _parseDate(d[dateField]);
     if (!t) return false;
     if (from && t < from) return false;
     if (to   && t > to)   return false;
@@ -979,24 +1013,39 @@ function dealsInRange(deals, dateField) {
 }
 
 // Filtra deals pelo período usando a data correta:
-// - won/lost → data de fechamento (won_time / lost_time / close_time)
-// - abertos / todos → data de abertura (add_time)
+// - won/lost → data de fechamento (won_time / lost_time / close_time / update_time)
+// - abertos  → bypass total (snapshot do pipeline atual)
 function dealsInRangeSmart(deals) {
   return deals.filter(d => {
-    // Deals abertos não têm data de fechamento — não filtrar por data
+    // Abertos: sempre incluir (estado atual do pipeline, sem data de fechamento)
     if (d.status === 'open') return true;
-    // Fechados: filtrar pela data de fechamento (won_time / lost_time)
-    let dateField;
-    if (d.status === 'won')  dateField = d.won_time  ? 'won_time'  : 'close_time';
-    else                     dateField = d.lost_time ? 'lost_time' : 'close_time';
-    const t = d[dateField] ? new Date(d[dateField]) : null;
-    if (!t) return false;
+
+    // Escolhe o melhor campo de data disponível (em ordem de preferência)
+    let t = null;
+    if (d.status === 'won') {
+      t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+    } else {
+      t = _parseDate(d.lost_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+    }
+
+    // Se não tem nenhuma data válida, inclui com aviso (não exclui silenciosamente)
+    if (!t) return true;
+
     const from = STATE.fromDate;
     const to   = STATE.toDate;
     if (from && t < from) return false;
     if (to   && t > to)   return false;
     return true;
   });
+}
+
+// Converte qualquer formato de data para Date, retorna null se inválido
+function _parseDate(val) {
+  if (!val) return null;
+  // Normaliza "2026-04-05 14:30:00" → "2026-04-05T14:30:00" (ISO)
+  const s = typeof val === 'string' ? val.replace(' ', 'T') : val;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function getGranularity() {
@@ -1692,7 +1741,7 @@ function renderFunnelViz(containerId, stages, deals) {
 
 // ─── TAB: EQUIPE ──────────────────────────────────────────────────────────────
 function renderEquipe() {
-  // ── coleta todos os deals do RAW, filtrado apenas por vendedor
+  // ── coleta todos os deals, filtrado apenas por vendedor (sem filtro de data aqui)
   const vid = STATE.vendor;
   const allByVendor = RAW.deals.filter(d =>
     vid === 'all' || normId(d.owner_id) === normId(vid)
@@ -1700,259 +1749,306 @@ function renderEquipe() {
   const preAll   = allByVendor.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
   const salesAll = allByVendor.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
 
-  // lista de owners (de todos os deals, não só filtrados por data)
+  // ── owners da lista completa de deals ─────────────────────────────────────
   const owners = [...new Map(allByVendor.map(d=>[String(d.owner_id), d.owner_name])).entries()]
     .filter(([id]) => id && id !== 'undefined')
     .map(([id, name]) => ({ id, name: name || '–' }));
 
-  // ── calcula métricas por vendedor ──────────────────────────────────────────
+  // ── métricas por vendedor ──────────────────────────────────────────────────
   const data = owners.map(o => {
     const oPre   = preAll.filter(d  => normId(d.owner_id) === o.id);
     const oSales = salesAll.filter(d => normId(d.owner_id) === o.id);
 
-    // deals Vendas no período (smart: open bypass, won/lost usa close date)
-    const oSalesPeriod = dealsInRangeSmart(oSales);
+    // Pré-Vendas: leads criados no período → reuniões agendadas (won Pré)
+    const preEntered  = dealsInRange(oPre, 'add_time').length;
+    const preWonArr   = dealsInRange(oPre.filter(d => d.status==='won'), 'won_time');
+    const preConvPct  = preEntered > 0 ? preWonArr.length / preEntered * 100 : 0;
 
-    const wonArr    = oSalesPeriod.filter(d => d.status === 'won');
-    const lostArr   = oSalesPeriod.filter(d => d.status === 'lost');
-    const openArr   = oSales.filter(d => d.status === 'open');
+    // Vendas: leads criados no período → ganhos (won Sales)
+    const salesEntered = dealsInRange(oSales, 'add_time').length;
+    const salesWonArr  = dealsInRangeSmart(oSales.filter(d => d.status==='won'));
+    const salesLostArr = dealsInRangeSmart(oSales.filter(d => d.status==='lost'));
+    const salesConvPct = salesEntered > 0 ? salesWonArr.length / salesEntered * 100 : 0;
+    const wonVal       = salesWonArr.reduce((s,d) => s+(parseFloat(d.value)||0), 0);
+    const ticket       = salesWonArr.length > 0 ? wonVal / salesWonArr.length : 0;
 
-    const wonVal    = wonArr.reduce((s,d) => s + (parseFloat(d.value) || 0), 0);
-    const pipeVal   = openArr.reduce((s,d) => s + (parseFloat(d.value) || 0), 0);
+    // Pipeline ativo (deals abertos em Vendas)
+    const openDeals  = oSales.filter(d => d.status==='open');
+    const pipeVal    = openDeals.reduce((s,d) => s+(parseFloat(d.value)||0), 0);
 
-    // leads Vendas criados no período
-    const oEntered  = dealsInRange(oSales, 'add_time').length;
-    const convPct   = oEntered > 0 ? wonArr.length / oEntered * 100 : 0;
-    const convStr   = oEntered > 0 ? convPct.toFixed(1) + '%' : '–';
+    // No-Show: stage 58 = no-show; reuniões = stage 7 + stage 58
+    const noShowDeals   = oSales.filter(d => normId(d.stage_id) === String(NO_SHOW_STAGE_ID));
+    const meetingDeals  = oSales.filter(d =>
+      normId(d.stage_id) === String(SALES_MEETING_STAGE_ID) ||
+      normId(d.stage_id) === String(NO_SHOW_STAGE_ID)
+    );
+    const noShowRate    = meetingDeals.length > 0
+      ? noShowDeals.length / meetingDeals.length * 100 : 0;
 
-    // reuniões Pré-Vendas (ganhos no período)
-    const reu       = dealsInRange(oPre.filter(d => d.status === 'won'), 'won_time').length;
-
-    // no-show: deals de Vendas que passaram pelo estágio NO_SHOW_STAGE_ID
-    // (estágio atual = NO_SHOW para deals abertos, ou qualquer won/lost com esse stage)
-    const noShow    = oSales.filter(d =>
-      normId(d.stage_id) === String(NO_SHOW_STAGE_ID) ||
-      (d.status !== 'open' && normId(d.stage_id) === String(NO_SHOW_STAGE_ID))
-    ).length;
-
-    // atividades do vendedor no período
-    const userActs  = RAW.activities.filter(a => {
-      if (normId(a.user_id) !== o.id) return false;
-      if (!STATE.fromDate && !STATE.toDate) return true;
-      const t = a.due_date ? new Date(a.due_date) : null;
-      if (!t) return false;
-      if (STATE.fromDate && t < STATE.fromDate) return false;
-      if (STATE.toDate   && t > STATE.toDate)   return false;
-      return true;
+    // Motivos de perda aggregados
+    const lostByReason = {};
+    salesLostArr.forEach(d => {
+      const r = d.lost_reason || 'Não informado';
+      lostByReason[r] = (lostByReason[r]||0) + 1;
     });
-    const actsDone  = userActs.filter(a => a.done).length;
-    const actsTotal = userActs.length;
-    const ticket    = wonArr.length > 0 ? wonVal / wonArr.length : 0;
 
-    // score composto: conv(40) + ganhos(30) + atividades(20) + ciclo(10)
-    // normalizado posteriormente
     return {
       ...o,
-      reu,
-      opts: openArr.length,
-      won: wonArr.length,
-      lost: lostArr.length,
-      convPct,
-      convStr,
-      wonVal,
-      pipeVal,
-      ticket,
-      noShow,
-      actsDone,
-      actsTotal,
-      oEntered,
-      _raw: { wonArr, openArr }
+      preEntered, preWon: preWonArr.length, preConvPct,
+      salesEntered, salesWon: salesWonArr.length, salesLost: salesLostArr.length,
+      salesConvPct, wonVal, ticket,
+      openCount: openDeals.length, pipeVal,
+      noShowCount: noShowDeals.length, meetingCount: meetingDeals.length, noShowRate,
+      lostByReason
     };
   });
 
   if (!data.length) {
-    ['eq-alerts-container','eq-scorecard-container','eq-meta-container'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:12px 0">Sem dados no período</div>';
-    });
     document.getElementById('tbody-equipe').innerHTML =
-      '<tr><td colspan="11" style="text-align:center;color:var(--text2)">Sem dados</td></tr>';
+      '<tr><td colspan="12" style="text-align:center;color:var(--text2)">Sem dados no período</td></tr>';
     return;
   }
 
-  // normaliza score
-  const maxWon  = Math.max(...data.map(d => d.won),  1);
-  const maxActs = Math.max(...data.map(d => d.actsDone), 1);
-  data.forEach(d => {
-    const sConv  = Math.min(d.convPct, 100) * 0.40;
-    const sWon   = (d.won / maxWon * 100) * 0.30;
-    const sActs  = (d.actsDone / maxActs * 100) * 0.20;
-    d.score = Math.round(sConv + sWon + sActs);
+  // ── KPI cards do Time ─────────────────────────────────────────────────────
+  const sumK  = k  => data.reduce((s,d)=>s+d[k],0);
+  const tPreE = sumK('preEntered'),  tPreW = sumK('preWon');
+  const tSalE = sumK('salesEntered'), tSalW = sumK('salesWon');
+  const tNS   = sumK('noShowCount'), tMeet = sumK('meetingCount');
+  const tPipe = sumK('pipeVal');
+
+  setText('eq-k-pre-conv',      tPreE  > 0 ? (tPreW /tPreE *100).toFixed(1)+'%' : '–');
+  setText('eq-k-pre-conv-sub',  tPreW + ' reuniões · ' + tPreE + ' leads Pré-Vendas');
+  setText('eq-k-sales-conv',    tSalE  > 0 ? (tSalW /tSalE *100).toFixed(1)+'%' : '–');
+  setText('eq-k-sales-conv-sub',tSalW + ' ganhos · ' + tSalE + ' leads Vendas');
+  setText('eq-k-noshow',        tMeet  > 0 ? (tNS   /tMeet *100).toFixed(1)+'%' : '–');
+  setText('eq-k-noshow-sub',    tNS + ' no-shows · ' + tMeet + ' reuniões');
+  setText('eq-k-pipe',          'R$ '+fmt(tPipe));
+  setText('eq-k-pipe-sub',      sumK('openCount') + ' deals em aberto');
+
+  const names = data.map(d => d.name.split(' ')[0]);
+  const COLORS = ['#2563eb','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
+
+  // ── Chart 1a: Conversão Pré-Vendas por consultor ─────────────────────────
+  destroyChart('ch-eq-conv-pre');
+  CHARTS['ch-eq-conv-pre'] = new Chart(document.getElementById('ch-eq-conv-pre').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        {
+          label: 'Leads Recebidos',
+          data: data.map(d => d.preEntered),
+          backgroundColor: 'rgba(37,99,235,.35)',
+          borderRadius: 4, borderSkipped: false
+        },
+        {
+          label: 'Reuniões Agendadas',
+          data: data.map(d => d.preWon),
+          backgroundColor: 'rgba(37,99,235,.85)',
+          borderRadius: 4, borderSkipped: false
+        }
+      ]
+    },
+    options: {
+      ...chartOptions({ yTitle: 'Deals' }),
+      plugins: {
+        ...chartOptions().plugins,
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0]?.dataIndex;
+              if (i === undefined) return;
+              const pct = data[i].preEntered > 0
+                ? (data[i].preWon / data[i].preEntered * 100).toFixed(1) + '%' : '–';
+              return ['Conv: ' + pct];
+            }
+          }
+        }
+      }
+    }
   });
-  data.sort((a, b) => b.score - a.score);
 
-  // ── 1. Alertas ─────────────────────────────────────────────────────────────
-  const alerts = [];
-  const metaInd = Math.ceil(METAS.novas_contas / Math.max(owners.length, 1));
-
-  data.forEach(d => {
-    if (d.opts === 0 && d.oEntered === 0) {
-      alerts.push({ type:'danger', icon:'⚠️',
-        text: d.name + ' — Pipeline zerado',
-        sub:  'Nenhum deal ativo ou recebido no período' });
-    }
-    if (d.oEntered >= 3 && d.convPct < 15) {
-      alerts.push({ type:'danger', icon:'📉',
-        text: d.name + ' — Conversão baixa (' + d.convStr + ')',
-        sub:  'Abaixo de 15% com ' + d.oEntered + ' leads recebidos' });
-    }
-    if (d.noShow >= 2) {
-      alerts.push({ type:'warning', icon:'👻',
-        text: d.name + ' — No-Show elevado (' + d.noShow + ')',
-        sub:  'Verificar qualidade das reuniões agendadas' });
-    }
-    if (d.actsTotal > 0 && d.actsDone / d.actsTotal < 0.5) {
-      alerts.push({ type:'warning', icon:'🕐',
-        text: d.name + ' — Atividades atrasadas',
-        sub:  d.actsDone + ' de ' + d.actsTotal + ' concluídas (' +
-              Math.round(d.actsDone / d.actsTotal * 100) + '%)' });
-    }
-    if (d.won >= metaInd) {
-      alerts.push({ type:'success', icon:'🏆',
-        text: d.name + ' — Meta atingida!',
-        sub:  d.won + ' ganhos · meta individual: ' + metaInd });
+  // ── Chart 1b: Conversão Vendas por consultor ──────────────────────────────
+  destroyChart('ch-eq-conv-sales');
+  CHARTS['ch-eq-conv-sales'] = new Chart(document.getElementById('ch-eq-conv-sales').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        {
+          label: 'Leads Recebidos',
+          data: data.map(d => d.salesEntered),
+          backgroundColor: 'rgba(16,185,129,.3)',
+          borderRadius: 4, borderSkipped: false
+        },
+        {
+          label: 'Ganhos',
+          data: data.map(d => d.salesWon),
+          backgroundColor: 'rgba(16,185,129,.85)',
+          borderRadius: 4, borderSkipped: false
+        }
+      ]
+    },
+    options: {
+      ...chartOptions({ yTitle: 'Deals' }),
+      plugins: {
+        ...chartOptions().plugins,
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0]?.dataIndex;
+              if (i === undefined) return;
+              const pct = data[i].salesEntered > 0
+                ? (data[i].salesWon / data[i].salesEntered * 100).toFixed(1) + '%' : '–';
+              return ['Conv: ' + pct];
+            }
+          }
+        }
+      }
     }
   });
 
-  const alertsEl = document.getElementById('eq-alerts-container');
-  if (alerts.length === 0) {
-    alertsEl.innerHTML = '<div class="eq-alert success"><div class="eq-alert-icon">✅</div>' +
-      '<div class="eq-alert-body"><div class="eq-alert-text">Nenhum alerta no período</div>' +
-      '<div class="eq-alert-sub">Time operando dentro dos parâmetros normais</div></div></div>';
+  // ── Chart 2: No-Show por consultor ────────────────────────────────────────
+  destroyChart('ch-eq-noshow');
+  CHARTS['ch-eq-noshow'] = new Chart(document.getElementById('ch-eq-noshow').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        {
+          label: 'Reuniões Agendadas (stage atual)',
+          data: data.map(d => d.meetingCount),
+          backgroundColor: 'rgba(37,99,235,.65)',
+          borderRadius: 4, borderSkipped: false
+        },
+        {
+          label: 'No-Show',
+          data: data.map(d => d.noShowCount),
+          backgroundColor: 'rgba(239,68,68,.8)',
+          borderRadius: 4, borderSkipped: false
+        }
+      ]
+    },
+    options: {
+      ...chartOptions({ yTitle: 'Deals' }),
+      plugins: {
+        ...chartOptions().plugins,
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0]?.dataIndex;
+              if (i === undefined) return;
+              const pct = data[i].meetingCount > 0
+                ? (data[i].noShowCount / data[i].meetingCount * 100).toFixed(1) + '%' : '–';
+              return ['Taxa No-Show: ' + pct];
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ── Chart 3: Pipeline por Etapa (barras horizontais, R$) ─────────────────
+  const salesStages = RAW.stages
+    .filter(s => s.pipeline_id == SALES_PIPELINE_ID)
+    .sort((a, b) => (a.order_nr||0) - (b.order_nr||0));
+  const openSales = salesAll.filter(d => d.status === 'open');
+  const stageData = salesStages.map(s => ({
+    name: s.name,
+    value: openSales.filter(d => normId(d.stage_id) === normId(s.id))
+                    .reduce((sum, d) => sum + (parseFloat(d.value)||0), 0),
+    count: openSales.filter(d => normId(d.stage_id) === normId(s.id)).length
+  })).filter(s => s.count > 0);
+
+  destroyChart('ch-eq-pipeline');
+  if (stageData.length > 0) {
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+    const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
+    CHARTS['ch-eq-pipeline'] = new Chart(document.getElementById('ch-eq-pipeline').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: stageData.map(s => s.name + ' (' + s.count + ' deals)'),
+        datasets: [{
+          label: 'Valor em aberto (R$)',
+          data: stageData.map(s => s.value),
+          backgroundColor: stageData.map((_, i) => `hsla(${210+i*18},65%,55%,.78)`),
+          borderRadius: 4, borderSkipped: false
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: textColor, font: { size: 11 }, boxWidth: 12 } },
+          tooltip: { callbacks: { label: ctx => ' R$ ' + fmt(ctx.raw) } }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 },
+               callback: v => 'R$' + fmtK(v) } },
+          y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 } } }
+        }
+      }
+    });
   } else {
-    alertsEl.innerHTML = alerts.map(a =>
-      `<div class="eq-alert ${a.type}">
-        <div class="eq-alert-icon">${a.icon}</div>
-        <div class="eq-alert-body">
-          <div class="eq-alert-text">${a.text}</div>
-          <div class="eq-alert-sub">${a.sub}</div>
-        </div>
-      </div>`
-    ).join('');
+    document.getElementById('ch-eq-pipeline').parentElement.innerHTML =
+      '<div class="empty-state" style="padding:32px 0"><div class="empty-icon">📭</div>' +
+      '<div class="empty-title">Nenhum deal em aberto no pipeline de Vendas</div></div>';
   }
 
-  // ── 2. Scorecard / Ranking ─────────────────────────────────────────────────
-  const scorecardEl = document.getElementById('eq-scorecard-container');
-  scorecardEl.innerHTML = data.map((d, i) => {
-    const cls = d.score >= 65 ? 'top' : d.score >= 35 ? 'mid' : 'low';
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
-    return `<div class="eq-scard">
-      <div class="eq-scard-rank">${medal}</div>
-      <div class="eq-scard-name" title="${d.name}">${d.name}</div>
-      <div class="eq-scard-score ${cls}">${d.score}</div>
-      <div class="eq-scard-lbl">Score de Performance</div>
-      <div class="eq-scard-metrics">
-        <div class="eq-scard-metric">
-          <span class="eq-scard-metric-val">${d.won}</span>
-          <span class="eq-scard-metric-lbl">Ganhos</span>
-        </div>
-        <div class="eq-scard-metric">
-          <span class="eq-scard-metric-val">${d.convStr}</span>
-          <span class="eq-scard-metric-lbl">Conversão</span>
-        </div>
-        <div class="eq-scard-metric">
-          <span class="eq-scard-metric-val">${d.actsDone}</span>
-          <span class="eq-scard-metric-lbl">Atividades</span>
-        </div>
-        <div class="eq-scard-metric">
-          <span class="eq-scard-metric-val">${d.opts}</span>
-          <span class="eq-scard-metric-lbl">Pipeline</span>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  // ── Chart 4: Motivos de Perda por Consultor (stacked bar) ────────────────
+  destroyChart('ch-eq-lost');
+  const allReasons = [...new Set(data.flatMap(d => Object.keys(d.lostByReason)))];
+  const RCOL = ['#ef4444','#f97316','#eab308','#8b5cf6','#06b6d4','#ec4899','#64748b','#10b981'];
+  const lostWrap = document.getElementById('eq-lost-wrap');
+  const hasPerdas = allReasons.length > 0 && data.some(d => Object.keys(d.lostByReason).length > 0);
 
-  // ── 3. Charts Comparativos ─────────────────────────────────────────────────
-  const labels = data.map(d => d.name.split(' ')[0]); // primeiro nome para labels curtos
+  if (hasPerdas) {
+    // rebuild canvas in case it was replaced
+    lostWrap.innerHTML = '<canvas id="ch-eq-lost"></canvas>';
+    CHARTS['ch-eq-lost'] = new Chart(document.getElementById('ch-eq-lost').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: names,
+        datasets: allReasons.map((reason, i) => ({
+          label: reason,
+          data: data.map(d => d.lostByReason[reason] || 0),
+          backgroundColor: RCOL[i % RCOL.length],
+          borderRadius: 4, borderSkipped: false
+        }))
+      },
+      options: chartOptions({ stacked: true, yTitle: 'Perdidos' })
+    });
+  } else {
+    lostWrap.innerHTML =
+      '<div class="empty-state" style="padding:32px 0"><div class="empty-icon">✅</div>' +
+      '<div class="empty-title">Nenhuma perda registrada no período</div></div>';
+  }
 
-  destroyChart('ch-eq-won');
-  CHARTS['ch-eq-won'] = new Chart(document.getElementById('ch-eq-won').getContext('2d'), {
-    type: 'bar',
-    data: { labels, datasets: [{
-      label: 'Ganhos', data: data.map(d => d.won),
-      backgroundColor: data.map((d, i) => i === 0 ? 'rgba(16,185,129,.9)' : 'rgba(16,185,129,.55)'),
-      borderRadius: 5, borderSkipped: false
-    }]},
-    options: chartOptions({ yTitle: 'Ganhos' })
-  });
-
-  destroyChart('ch-eq-conv');
-  CHARTS['ch-eq-conv'] = new Chart(document.getElementById('ch-eq-conv').getContext('2d'), {
-    type: 'bar',
-    data: { labels, datasets: [{
-      label: 'Conversão %', data: data.map(d => +d.convPct.toFixed(1)),
-      backgroundColor: data.map(d =>
-        d.convPct >= 30 ? 'rgba(37,99,235,.85)' :
-        d.convPct >= 15 ? 'rgba(245,158,11,.85)' : 'rgba(239,68,68,.85)'),
-      borderRadius: 5, borderSkipped: false
-    }]},
-    options: chartOptions({ yTitle: '%' })
-  });
-
-  destroyChart('ch-eq-mrr');
-  CHARTS['ch-eq-mrr'] = new Chart(document.getElementById('ch-eq-mrr').getContext('2d'), {
-    type: 'bar',
-    data: { labels, datasets: [{
-      label: 'Pipeline R$', data: data.map(d => d.pipeVal),
-      backgroundColor: 'rgba(245,158,11,.75)', borderRadius: 5, borderSkipped: false
-    }]},
-    options: chartOptions({ yTitle: 'R$', money: true })
-  });
-
-  // ── 4. Meta vs Realizado ───────────────────────────────────────────────────
-  const metaEl = document.getElementById('eq-meta-container');
-  metaEl.innerHTML = data.map(d => {
-    const pct  = metaInd > 0 ? Math.min(d.won / metaInd * 100, 100) : 0;
-    const over = metaInd > 0 && d.won > metaInd;
-    const fillColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
-    const pctLabel  = pct >= 100 ? (over ? Math.round(d.won / metaInd * 100) + '%' : '100%') : Math.round(pct) + '%';
-    const pctClass  = pct >= 100 ? 'tbl-good' : pct >= 60 ? 'tbl-warn' : 'tbl-bad';
-    return `<div class="eq-meta-row">
-      <div class="eq-meta-header">
-        <span class="eq-meta-name">${d.name}</span>
-        <span>
-          <span class="eq-meta-values">${d.won} ganhos / meta ${metaInd}</span>
-          <span class="eq-meta-pct ${pctClass}">${pctLabel}</span>
-        </span>
-      </div>
-      <div class="eq-meta-bar">
-        <div class="eq-meta-fill" style="width:${pct}%;background:${fillColor}"></div>
-      </div>
-      <div class="eq-meta-sub">Receita: R$ ${fmt(d.wonVal)} · Ticket médio: R$ ${fmt(d.ticket)}${over ? ' · ✨ Meta superada!' : ''}</div>
-    </div>`;
-  }).join('');
-
-  // ── 5. Tabela ──────────────────────────────────────────────────────────────
+  // ── Tabela de Performance ─────────────────────────────────────────────────
   const tbody = document.getElementById('tbody-equipe');
-  tbody.innerHTML = data.map((d, i) => {
-    const convClass = d.convPct >= 30 ? 'tbl-good' : d.convPct >= 15 ? 'tbl-warn' : (d.oEntered > 0 ? 'tbl-bad' : '');
-    const noShowClass = d.noShow >= 3 ? 'tbl-bad' : d.noShow >= 1 ? 'tbl-warn' : 'tbl-good';
-    const actsClass = d.actsTotal > 0 && d.actsDone / d.actsTotal >= 0.7 ? 'tbl-good' :
-                      d.actsTotal > 0 ? 'tbl-warn' : '';
+  tbody.innerHTML = data.map(d => {
+    const pCls  = d.preEntered  > 0 ? (d.preConvPct  >= 40 ? 'tbl-good' : d.preConvPct  >= 20 ? 'tbl-warn' : 'tbl-bad') : '';
+    const sCls  = d.salesEntered > 0 ? (d.salesConvPct >= 30 ? 'tbl-good' : d.salesConvPct >= 15 ? 'tbl-warn' : 'tbl-bad') : '';
+    const nsCls = d.meetingCount > 0 ? (d.noShowRate >= 30 ? 'tbl-bad' : d.noShowRate >= 15 ? 'tbl-warn' : 'tbl-good') : '';
+    const preConvStr   = d.preEntered   > 0 ? d.preConvPct.toFixed(1)   + '%' : '–';
+    const salesConvStr = d.salesEntered > 0 ? d.salesConvPct.toFixed(1) + '%' : '–';
+    const nsStr        = d.meetingCount > 0
+      ? d.noShowCount + ' (' + d.noShowRate.toFixed(1) + '%)' : '–';
     return `<tr>
-      <td style="color:var(--text3);font-weight:700">${i+1}</td>
       <td><strong>${d.name}</strong></td>
-      <td>${d.oEntered}</td>
-      <td>${d.reu}</td>
-      <td><span class="badge badge-success">${d.won}</span></td>
-      <td><span class="badge badge-danger">${d.lost}</span></td>
-      <td class="${convClass}">${d.convStr}</td>
+      <td>${d.preEntered}</td>
+      <td>${d.preWon}</td>
+      <td class="${pCls}">${preConvStr}</td>
+      <td>${d.salesEntered}</td>
+      <td><span class="badge badge-success">${d.salesWon}</span></td>
+      <td><span class="badge badge-danger">${d.salesLost}</span></td>
+      <td class="${sCls}">${salesConvStr}</td>
       <td>R$ ${fmt(d.wonVal)}</td>
       <td>R$ ${fmt(d.ticket)}</td>
-      <td class="${noShowClass}">${d.noShow}</td>
-      <td class="${actsClass}">${d.actsDone}/${d.actsTotal}</td>
+      <td>${d.meetingCount}</td>
+      <td class="${nsCls}">${nsStr}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text2)">Sem dados</td></tr>';
+  }).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--text2)">Sem dados no período</td></tr>';
 }
 
 // ─── TAB: ATIVIDADES ──────────────────────────────────────────────────────────
