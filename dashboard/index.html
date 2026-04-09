@@ -895,8 +895,14 @@ async function loadData() {
       'Atualizado: ' + (RAW.lastUpdated ? new Date(RAW.lastUpdated).toLocaleString('pt-BR') : '–');
     refreshSeconds = 7200;
   } catch (err) {
-    showError('Erro ao carregar dados: ' + err.message +
-              (WEBAPP_URL.includes('COLE') ? ' — Configure WEBAPP_URL no código.' : ''));
+    // Tenta extrair mensagem JSON do erro (vem do proxy Flask)
+    let errMsg = err.message;
+    try {
+      const errJson = JSON.parse(err.message);
+      if (errJson.error) errMsg = errJson.error;
+    } catch(_) {}
+    showError('⚠️ Sem conexão com o Pipedrive — exibindo dados simulados. Motivo: ' + errMsg +
+              ' · Clique em Atualizar para tentar novamente.');
     // Demo mode with mock data
     loadMockData();
   } finally {
