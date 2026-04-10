@@ -1139,16 +1139,20 @@ function renderVisao() {
   const lost     = inPeriodSales.filter(d => d.status === 'lost');
   const optsOpen = salesFixed.filter(d => d.status === 'open');   // pipeline atual sem filtro de data
 
+  // Total de ganhos históricos (sem filtro de data) — usado para diagnóstico
+  const wonAllTime = salesFixed.filter(d => d.status === 'won');
+
   const wonVal    = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
   const lostVal   = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
   // Conversão = ganhos / leads recebidos no período (Sales pipeline, add_time)
-  const entered   = leads.length;  // leads já é dealsInRange(salesFixed, 'add_time')
+  const entered   = leads.length;
   const conv      = entered > 0 ? (won.length/entered*100).toFixed(1) : '0.0';
   const ticket    = won.length > 0 ? wonVal/won.length : 0;
-  const ciclo    = won.length > 0
+  const ciclo     = won.length > 0
     ? won.reduce((s,d)=>{
-        if(d.add_time&&d.won_time) return s+(new Date(d.won_time)-new Date(d.add_time))/86400000;
-        return s;},0)/won.length
+        const ta = _parseDate(d.add_time), tw = _parseDate(d.won_time) || _parseDate(d.close_time);
+        return ta && tw ? s + (tw - ta) / 86400000 : s;
+      }, 0) / won.length
     : 0;
 
   // KPIs
@@ -1159,7 +1163,11 @@ function renderVisao() {
   setText('k-opts',     optsOpen.length);
   setText('k-opts-sub', 'R$ '+fmt(optsOpen.reduce((s,d)=>s+(parseFloat(d.value)||0),0)));
   setText('k-won',      won.length);
-  setText('k-won-sub',  'R$ '+fmt(wonVal));
+  // Sub mostra total histórico para ajudar a diagnosticar se é filtro ou sync
+  const wonSubExtra = wonAllTime.length > won.length
+    ? ` · ${wonAllTime.length} no total (${wonAllTime.length - won.length} fora do período)`
+    : '';
+  setText('k-won-sub',  'R$ '+fmt(wonVal) + wonSubExtra);
   setText('k-conv',     conv+'%');
   setText('k-conv-sub', `${won.length} ganhos / ${entered} recebidos`);
   setText('k-ticket',   Math.round(ciclo) + ' dias');
@@ -1333,7 +1341,7 @@ function renderMainChart(gran) {
   const labels  = periods.map(p=>p.label);
 
   const inP = (d, field, p) => {
-    const t = d[field] ? new Date(d[field]) : null;
+    const t = _parseDate(d[field]);
     return t && t>=p.start && t<p.end;
   };
 
@@ -1576,11 +1584,15 @@ function renderGanhosMes() {
     return t && t >= p.start && t < p.end;
   };
 
-  // Dados por período — fechados usam won_time
-  const countData   = periods.map(p => sales.filter(d    => inP(d, 'won_time', p)).length);
-  const valueData   = periods.map(p => sales.filter(d    => inP(d, 'won_time', p))
+  // Helper: data de fechamento do ganho (won_time → close_time, com _parseDate)
+  const wonDate = d => _parseDate(d.won_time) || _parseDate(d.close_time);
+  const inPWon  = (d, p) => { const t = wonDate(d); return t && t >= p.start && t < p.end; };
+
+  // Dados por período — fechados usam won_time (fallback close_time)
+  const countData   = periods.map(p => sales.filter(d    => inPWon(d, p)).length);
+  const valueData   = periods.map(p => sales.filter(d    => inPWon(d, p))
                                               .reduce((s,d) => s+(parseFloat(d.value)||0), 0));
-  const reunData    = periods.map(p => presales.filter(d => inP(d, 'won_time', p)).length);
+  const reunData    = periods.map(p => presales.filter(d => inPWon(d, p)).length);
 
   const bgCount  = countData.map((_,i)  => i===lastIdx ? 'rgba(16,185,129,.95)' : 'rgba(16,185,129,.55)');
   const bgValue  = valueData.map((_,i)  => i===lastIdx ? 'rgba(37,99,235,.95)'  : 'rgba(37,99,235,.55)');
