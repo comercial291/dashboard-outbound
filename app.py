@@ -1,47 +1,228 @@
-import os, json, requests
+import os
+import json
+import time
+import requests
+from datetime import datetime, timedelta
 from flask import Flask, request, Response, send_from_directory
 
 app = Flask(__name__, static_folder="dashboard")
 
-SHEETS_WEBAPP_URL = os.environ.get("SHEETS_WEBAPP_URL", "")
+# ── Configuração via variáveis de ambiente ─────────────────────────────────────
+PIPEDRIVE_API_KEY    = os.environ.get("PIPEDRIVE_API_KEY", "")
+PIPEDRIVE_BASE       = "https://api.pipedrive.com/v1"
+PRESALES_PIPELINE_ID = int(os.environ.get("PRESALES_PIPELINE_ID", "1"))
+SALES_PIPELINE_ID    = int(os.environ.get("SALES_PIPELINE_ID",    "2"))
+CACHE_TTL            = int(os.environ.get("CACHE_TTL_SECONDS",    "900"))  # 15 min
+
+# ── Cache em memória ───────────────────────────────────────────────────────────
+_cache = {"data": None, "ts": 0.0}
+
+
+# ── Helpers Pipedrive API ──────────────────────────────────────────────────────
+def pd_get(endpoint: str, params: dict = None) -> dict:
+    url = f"{PIPEDRIVE_BASE}/{endpoint}"
+    p   = {"api_token": PIPEDRIVE_API_KEY, "limit": 500, **(params or {})}
+    r   = requests.get(url, params=p, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def pd_get_all(endpoint: str, params: dict = None) -> list:
+    """Percorre todas as páginas e retorna lista completa."""
+    items, start = [], 0
+    while True:
+        data  = pd_get(endpoint, {**(params or {}), "start": start})
+        batch = data.get("data") or []
+        items.extend(batch)
+        pg = (data.get("additional_data") or {}).get("pagination") or {}
+        if not pg.get("more_items_in_collection"):
+            break
+        start += 500
+    return items
+
+
+# ── Normalizers ────────────────────────────────────────────────────────────────
+def _v(obj, key, fallback=""):
+    val = obj.get(key)
+    if isinstance(val, dict):
+        return val.get("value") or val.get("id") or fallback
+    return val if val is not None else fallback
+
+
+def _name(obj, key, fallback=""):
+    val = obj.get(key)
+    if isinstance(val, dict):
+        return val.get("name", fallback)
+    return fallback
+
+
+def norm_deal(d: dict, pipeline_id: int, stages_map: dict) -> dict:
+    sid    = d.get("stage_id")
+    stage  = stages_map.get(sid, {})
+    status = d.get("status", "")
+    close  = d.get("close_time") or ""
+    # Garante que won_time / lost_time sempre têm valor para deals fechados
+    won    = d.get("won_time")  or (close if status == "won"  else "") or ""
+    lost   = d.get("lost_time") or (close if status == "lost" else "") or ""
+    return {
+        "id":             d.get("id"),
+        "title":          d.get("title", ""),
+        "pipeline_id":    pipeline_id,
+        "stage_id":       sid,
+        "stage_name":     stage.get("name", ""),
+        "stage_order":    stage.get("order_nr", 0),
+        "status":         status,
+        "value":          float(d.get("value") or 0),
+        "currency":       d.get("currency", "BRL"),
+        "owner_id":       _v(d, "owner_id") or _v(d, "user_id"),
+        "owner_name":     _name(d, "owner_id") or _name(d, "user_id"),
+        "add_time":       d.get("add_time", ""),
+        "update_time":    d.get("update_time", ""),
+        "close_time":     close,
+        "won_time":       won,
+        "lost_time":      lost,
+        "lost_reason":    d.get("lost_reason") or "",
+        "weighted_value": float(d.get("weighted_value") or 0),
+    }
+
+
+def norm_activity(a: dict) -> dict:
+    return {
+        "id":                  a.get("id"),
+        "type":                a.get("type", ""),
+        "subject":             a.get("subject", ""),
+        "done":                bool(a.get("done")),
+        "due_date":            a.get("due_date", ""),
+        "due_time":            a.get("due_time", ""),
+        "deal_id":             a.get("deal_id"),
+        "user_id":             a.get("user_id"),
+        "add_time":            a.get("add_time", ""),
+        "marked_as_done_time": a.get("marked_as_done_time") or "",
+    }
+
+
+def norm_stage(s: dict) -> dict:
+    return {
+        "id":          s.get("id"),
+        "name":        s.get("name", ""),
+        "pipeline_id": s.get("pipeline_id"),
+        "order_nr":    s.get("order_nr", 0),
+        "active_flag": s.get("active_flag", True),
+    }
+
+
+def norm_user(u: dict) -> dict:
+    return {
+        "id":          u.get("id"),
+        "name":        u.get("name", ""),
+        "active_flag": u.get("active_flag", True),
+    }
+
+
+# ── Busca completa ─────────────────────────────────────────────────────────────
+def fetch_all_data() -> dict:
+    # 1. Etapas dos pipelines
+    stages_raw = []
+    for pid in [PRESALES_PIPELINE_ID, SALES_PIPELINE_ID]:
+        data = pd_get("stages", {"pipeline_id": pid})
+        stages_raw.extend(data.get("data") or [])
+    stages     = [norm_stage(s) for s in stages_raw]
+    stages_map = {s["id"]: s for s in stages}
+
+    # 2. Deals — ambos os pipelines, todos os status
+    deals = []
+    for pid in [PRESALES_PIPELINE_ID, SALES_PIPELINE_ID]:
+        for status in ("open", "won", "lost"):
+            batch = pd_get_all("deals", {"pipeline_id": pid, "status": status})
+            deals.extend(norm_deal(d, pid, stages_map) for d in batch)
+
+    # 3. Usuários
+    users = [norm_user(u) for u in (pd_get("users").get("data") or [])]
+
+    # 4. Atividades (últimos 365 dias, pendentes e concluídas)
+    since = (datetime.utcnow() - timedelta(days=365)).strftime("%Y-%m-%d")
+    activities = []
+    for done in (0, 1):
+        batch = pd_get_all("activities", {"done": done, "start_date": since})
+        activities.extend(norm_activity(a) for a in batch)
+
+    return {
+        "ok":          True,
+        "deals":       deals,
+        "activities":  activities,
+        "users":       users,
+        "stages":      stages,
+        "lastUpdated": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ── Rotas Flask ────────────────────────────────────────────────────────────────
+def _json_resp(data, status: int = 200) -> Response:
+    r = Response(json.dumps(data, default=str),
+                 status=status, content_type="application/json")
+    r.headers["Access-Control-Allow-Origin"] = "*"
+    return r
+
 
 @app.route("/")
 def index():
     return send_from_directory("dashboard", "index.html")
 
+
 @app.route("/ping")
 def ping():
     return "ok", 200
 
+
 @app.route("/sheets-proxy")
 def sheets_proxy():
-    def json_err(msg, status=503):
-        r = Response(json.dumps({"ok": False, "error": msg}),
-                     status=status, content_type="application/json")
-        r.headers["Access-Control-Allow-Origin"] = "*"
-        return r
+    global _cache
 
-    if not SHEETS_WEBAPP_URL:
-        return json_err("SHEETS_WEBAPP_URL nao configurada no servidor")
+    if not PIPEDRIVE_API_KEY:
+        return _json_resp(
+            {"ok": False, "error": "PIPEDRIVE_API_KEY não configurada no servidor."},
+            503
+        )
 
-    params = dict(request.args)
+    # ?force=1 → ignora cache (botão Atualizar)
+    force = request.args.get("force") == "1"
+
+    if not force and _cache["data"] and (time.time() - _cache["ts"]) < CACHE_TTL:
+        return _json_resp(_cache["data"])
+
     try:
-        r = requests.get(SHEETS_WEBAPP_URL, params=params, timeout=120)
-        # Repassa a resposta do Apps Script tal como veio
-        resp = Response(r.content, status=r.status_code,
-                        content_type="application/json")
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        return resp
+        data   = fetch_all_data()
+        _cache = {"data": data, "ts": time.time()}
+        return _json_resp(data)
+
     except requests.exceptions.Timeout:
-        return json_err("Timeout ao conectar ao Google Sheets (>120s). Tente atualizar.")
-    except requests.exceptions.ConnectionError as e:
-        return json_err(f"Erro de conexão com Google Sheets: {str(e)[:120]}")
+        if _cache["data"]:
+            # Retorna cache antigo com aviso
+            stale = dict(_cache["data"])
+            stale["_stale"] = True
+            return _json_resp(stale)
+        return _json_resp(
+            {"ok": False, "error": "Pipedrive demorou para responder. Tente novamente em alguns segundos."},
+            503
+        )
+    except requests.exceptions.RequestException as e:
+        if _cache["data"]:
+            return _json_resp(_cache["data"])
+        return _json_resp(
+            {"ok": False, "error": f"Erro de conexão com Pipedrive: {str(e)[:150]}"},
+            503
+        )
     except Exception as e:
-        return json_err(f"Erro inesperado no proxy: {str(e)[:200]}", status=500)
+        return _json_resp(
+            {"ok": False, "error": f"Erro interno: {str(e)[:200]}"},
+            500
+        )
+
 
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory("dashboard", filename)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

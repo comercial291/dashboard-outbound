@@ -385,7 +385,7 @@ tr:hover td{background:var(--primary-lt)}
       <div class="refresh-dot"></div>
       <span id="refresh-countdown">–</span>
     </div>
-    <button class="btn btn-ghost" onclick="loadData()">
+    <button class="btn btn-ghost" onclick="loadData(true)">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
       Atualizar
     </button>
@@ -875,11 +875,17 @@ function applyFilters() {
 }
 
 // ─── DATA LOADING ─────────────────────────────────────────────────────────────
-async function loadData() {
-  showOverlay('Carregando dados do Pipedrive…');
+let _hasData = false; // controla se já carregou ao menos uma vez
+
+async function loadData(force = false) {
+  // Primeira carga ou refresh manual sempre força dados frescos
+  const useForce = force || !_hasData;
+  showOverlay(useForce
+    ? 'Conectando ao Pipedrive… Primeira carga pode levar 10–20s.'
+    : 'Atualizando dados…');
   hideError();
   try {
-    const url = WEBAPP_URL + '?action=all&t=' + Date.now();
+    const url = WEBAPP_URL + '?action=all' + (useForce ? '&force=1' : '') + '&t=' + Date.now();
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
@@ -889,22 +895,20 @@ async function loadData() {
     RAW.users       = data.users       || [];
     RAW.stages      = data.stages      || [];
     RAW.lastUpdated = data.lastUpdated;
+    _hasData = true;
     populateVendorFilter();
     renderAll();
-    document.getElementById('last-updated').textContent =
-      'Atualizado: ' + (RAW.lastUpdated ? new Date(RAW.lastUpdated).toLocaleString('pt-BR') : '–');
+    const updLabel = RAW.lastUpdated
+      ? new Date(RAW.lastUpdated).toLocaleString('pt-BR')
+      : '–';
+    document.getElementById('last-updated').textContent = 'Atualizado: ' + updLabel;
     refreshSeconds = 7200;
   } catch (err) {
-    // Tenta extrair mensagem JSON do erro (vem do proxy Flask)
     let errMsg = err.message;
-    try {
-      const errJson = JSON.parse(err.message);
-      if (errJson.error) errMsg = errJson.error;
-    } catch(_) {}
-    showError('⚠️ Sem conexão com o Pipedrive — exibindo dados simulados. Motivo: ' + errMsg +
+    try { const j = JSON.parse(err.message); if (j.error) errMsg = j.error; } catch(_) {}
+    showError('⚠️ Sem conexão com o Pipedrive — dados simulados. Motivo: ' + errMsg +
               ' · Clique em Atualizar para tentar novamente.');
-    // Demo mode with mock data
-    loadMockData();
+    if (!_hasData) loadMockData();
   } finally {
     hideOverlay();
   }
@@ -2286,7 +2290,7 @@ function startRefreshCountdown() {
     document.getElementById('refresh-countdown').textContent =
       `${pad(m)}:${pad(s)}`;
     if (refreshSeconds <= 0) {
-      loadData();
+      loadData(true); // auto-refresh força dados frescos (cache expirado)
       refreshSeconds = 7200;
     }
   }, 1000);

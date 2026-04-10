@@ -5,5 +5,11 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
-      - key: SHEETS_WEBAPP_URL
+      - key: PIPEDRIVE_API_KEY
         sync: false
+      - key: PRESALES_PIPELINE_ID
+        value: "1"
+      - key: SALES_PIPELINE_ID
+        value: "2"
+      - key: CACHE_TTL_SECONDS
+        value: "900"
