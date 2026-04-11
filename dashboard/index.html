@@ -2546,16 +2546,23 @@ function renderIndividual() {
 
   let html = '';
 
-  // ══ Metas da Empresa — um gauge-grid por mês ══════════════════════════════
+  // ══ Metas da Empresa — apenas funil de Vendas, um gauge-grid por mês ════════
+  // Filtra SOMENTE deals do funil de Vendas (won_time/close_time como data de fechamento)
+  const empresaDeals = RAW.deals.filter(d =>
+    d.pipeline_id == SALES_PIPELINE_ID && d.status === 'won'
+  );
   html += sectionTitle('Metas da Empresa');
   months.forEach(m => {
-    const cWon     = wonInMonth(salesDeals, null, m);
+    const cWon = empresaDeals.filter(d => {
+      const t = _parseDate(d.won_time) || _parseDate(d.close_time);
+      return t && t >= m.start && t < m.end;
+    });
     const cContas  = cWon.length;
-    const cReceita = cWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+    const cReceita = cWon.reduce((s,d) => s + (parseFloat(d.value) || 0), 0);
     html += monthLabel(m.label);
     html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:20px">`;
-    html += makeGauge('Faturamento Total', 'EMPRESA', cReceita, GOAL_RECEITA, v=>'R$'+fmtK(v));
-    html += makeGauge('Novas Contas',      'EMPRESA', cContas,  GOAL_CONTAS,  v=>String(v));
+    html += makeGauge('Faturamento Total', 'EMPRESA', cReceita, GOAL_RECEITA, v => 'R$' + fmtK(v));
+    html += makeGauge('Novas Contas',      'EMPRESA', cContas,  GOAL_CONTAS,  v => String(v));
     html += `</div>`;
   });
 
