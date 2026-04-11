@@ -1083,7 +1083,10 @@ function dealsInRangeSmart(deals) {
 function _parseDate(val) {
   if (!val) return null;
   // Normaliza "2026-04-05 14:30:00" → "2026-04-05T14:30:00" (ISO)
-  const s = typeof val === 'string' ? val.replace(' ', 'T') : val;
+  let s = typeof val === 'string' ? val.replace(' ', 'T') : val;
+  // Strings só-data "YYYY-MM-DD" são parseadas como UTC pelo JS (≠ horário local).
+  // Adiciona T00:00:00 para forçar interpretação como horário local (Brasil UTC-3).
+  if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)) s += 'T00:00:00';
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -1246,10 +1249,10 @@ function renderVisao() {
 }
 
 function renderAtividadesKPI() {
-  const vid   = STATE.vendor;
-  const from  = STATE.fromDate;
-  const to    = STATE.toDate;
-  const today = new Date(); today.setHours(23,59,59,999);
+  const vid        = STATE.vendor;
+  const from       = STATE.fromDate;
+  const to         = STATE.toDate;
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0); // meia-noite local
 
   // Build name map to resolve user_id → name
   const nameMap = {};
@@ -1276,18 +1279,18 @@ function renderAtividadesKPI() {
     return true;
   });
 
-  // Atrasadas: done=false e due_date < hoje
+  // Atrasadas: done=false e due_date < hoje (antes da meia-noite de hoje)
   const late = acts.filter(a => {
     if (a.done) return false;
     const t = _parseDate(a.due_date);
-    return t && t < today;
+    return t && t < todayStart;
   });
 
-  // Pendentes: done=false e due_date >= hoje
+  // Pendentes: done=false e due_date >= hoje (hoje ou no futuro)
   const pend = acts.filter(a => {
     if (a.done) return false;
     const t = _parseDate(a.due_date);
-    return t && t >= today;
+    return t && t >= todayStart;
   });
 
   const total = done.length + pend.length;
@@ -2109,11 +2112,10 @@ function renderEquipe() {
 
 // ─── TAB: ATIVIDADES ──────────────────────────────────────────────────────────
 function renderAtividades() {
-  const vid  = STATE.vendor;
-  const from = STATE.fromDate;
-  const to   = STATE.toDate;
-  const now  = new Date();
-  const today = new Date(); today.setHours(23,59,59,999);
+  const vid        = STATE.vendor;
+  const from       = STATE.fromDate;
+  const to         = STATE.toDate;
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0); // meia-noite local
 
   // Mapa id → nome (users + owners dos deals para cobrir usuários sem acesso)
   const nameMap = {};
@@ -2139,8 +2141,8 @@ function renderAtividades() {
 
   // ── KPIs da aba ─────────────────────────────────────────────────────────
   const doneFilt = acts.filter(a => a.done);
-  const pendFilt = acts.filter(a => !a.done && !(_parseDate(a.due_date) < today));
-  const lateFilt = acts.filter(a => !a.done && _parseDate(a.due_date) < today);
+  const lateFilt = acts.filter(a => !a.done && _parseDate(a.due_date) < todayStart);
+  const pendFilt = acts.filter(a => !a.done && _parseDate(a.due_date) >= todayStart);
 
   setText('at-total', acts.length);
   setText('at-done',  doneFilt.length);
@@ -2179,8 +2181,8 @@ function renderAtividades() {
   const cData = consultantIds.map(uid => {
     const userActs = acts.filter(a => normId(a.user_id) === uid);
     const doneC = userActs.filter(a => a.done).length;
-    const lateC = userActs.filter(a => !a.done && _parseDate(a.due_date) < today).length;
-    const pendC = userActs.filter(a => !a.done && !(_parseDate(a.due_date) < today)).length;
+    const lateC = userActs.filter(a => !a.done && _parseDate(a.due_date) < todayStart).length;
+    const pendC = userActs.filter(a => !a.done && _parseDate(a.due_date) >= todayStart).length;
     return { name: nameMap[uid] || uid, doneC, lateC, pendC };
   }).sort((a, b) => (b.doneC+b.lateC+b.pendC) - (a.doneC+a.lateC+a.pendC));
 
