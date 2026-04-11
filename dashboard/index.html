@@ -275,6 +275,44 @@ tr:hover td{background:var(--primary-lt)}
 .fc-dot{width:10px;height:10px;border-radius:2px}
 
 /* ═══════════════════════════════════════════════════════════
+   INDIVIDUAL — Metas por Mês
+═══════════════════════════════════════════════════════════ */
+.ind-person{margin-bottom:28px}
+.ind-person-header{display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:12px}
+.ind-person-name{font-size:15px;font-weight:800;color:var(--text)}
+.ind-person-goal{font-size:11px;color:var(--text2);background:var(--primary-lt);
+  border-radius:6px;padding:3px 10px;font-weight:600}
+
+.ind-month-grid{display:flex;flex-wrap:wrap;gap:12px}
+.ind-month-card{background:var(--card);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px 20px;flex:1;min-width:180px;max-width:260px;
+  border-top:3px solid var(--primary);transition:background .2s}
+.ind-month-label{font-size:12px;font-weight:700;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;text-align:center}
+
+.ind-metric{margin-bottom:14px}
+.ind-metric:last-child{margin-bottom:0}
+.ind-metric-header{display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:5px}
+.ind-metric-label{font-size:11px;font-weight:600;color:var(--text2)}
+.ind-metric-pct{font-size:16px;font-weight:800}
+.ind-metric-bar{height:7px;background:var(--border);border-radius:4px;
+  overflow:hidden;margin-bottom:4px}
+.ind-metric-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.ind-metric-vals{font-size:11px;color:var(--text2)}
+.ind-metric-vals b{color:var(--text);font-weight:700}
+
+.ind-total-card{background:var(--primary-lt);border:1px solid var(--primary);
+  border-radius:var(--radius);padding:14px 20px;margin-bottom:14px;
+  display:flex;gap:24px;flex-wrap:wrap}
+.ind-total-item{display:flex;flex-direction:column}
+.ind-total-lbl{font-size:10px;font-weight:700;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.6px}
+.ind-total-val{font-size:20px;font-weight:800;color:var(--text)}
+.ind-total-sub{font-size:11px;color:var(--text2)}
+
+/* ═══════════════════════════════════════════════════════════
    EQUIPE — Alertas
 ═══════════════════════════════════════════════════════════ */
 .eq-alerts{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
@@ -713,10 +751,27 @@ tr:hover td{background:var(--primary-lt)}
 
   <!-- ══════════════════ TAB: INDIVIDUAL ══════════════════ -->
   <div class="tab-panel" id="tab-individual">
-    <div class="section-header"><div class="section-title">Metas Individuais — Vendas</div></div>
-    <div class="gauge-grid" id="gauges-vendas"></div>
-    <div class="section-header" style="margin-top:20px"><div class="section-title">Metas Individuais — Pré-Vendas (Reuniões)</div></div>
-    <div class="gauge-grid" id="gauges-presales"></div>
+
+    <!-- Mauricio — Vendas -->
+    <div class="ind-person">
+      <div class="ind-person-header">
+        <div class="section-title" id="ind-mauricio-title">Mauricio — Vendas</div>
+        <span class="ind-person-goal">Meta: 16 contas · R$ 12.000 receita / mês</span>
+      </div>
+      <div id="ind-mauricio-summary"></div>
+      <div id="ind-mauricio"></div>
+    </div>
+
+    <!-- Erica — Pré-Vendas -->
+    <div class="ind-person">
+      <div class="ind-person-header">
+        <div class="section-title" id="ind-erica-title">Erica — Pré-Vendas</div>
+        <span class="ind-person-goal">Meta: 60 reuniões / mês</span>
+      </div>
+      <div id="ind-erica-summary"></div>
+      <div id="ind-erica"></div>
+    </div>
+
   </div>
 
   <!-- ══════════════════ TAB: MOTIVOS DE PERDA ══════════════════ -->
@@ -2259,34 +2314,146 @@ function renderAtividades() {
 
 // ─── TAB: INDIVIDUAL ──────────────────────────────────────────────────────────
 function renderIndividual() {
-  const sales = filteredDeals().filter(d=>d.pipeline_id==SALES_PIPELINE_ID);
-  const pre   = filteredDeals().filter(d=>d.pipeline_id==PRESALES_PIPELINE_ID);
-  const now   = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const now  = new Date();
+  const from = STATE.fromDate || new Date(now.getFullYear(), now.getMonth(), 1);
+  const to   = STATE.toDate   || now;
 
-  const owners = [...new Map(
-    [...sales,...pre].map(d=>[d.owner_id,d.owner_name])
-  ).entries()].filter(([id])=>id).map(([id,name])=>({id,name:name||'–'}));
+  // Mapa id → nome (users + deal owners)
+  const nameMap = {};
+  RAW.users.forEach(u => { if (u.id != null) nameMap[normId(u.id)] = u.name; });
+  RAW.deals.forEach(d => {
+    const id = normId(d.owner_id);
+    if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
+  });
 
-  // Vendas
-  const salesOwners = owners.filter(o=>sales.some(d=>d.owner_id==o.id));
-  document.getElementById('gauges-vendas').innerHTML = salesOwners.map(o => {
-    const won = sales.filter(d=>d.owner_id==o.id&&d.status==='won'&&d.won_time&&new Date(d.won_time)>=monthStart);
-    const wonVal = won.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-    const pct = Math.min(100, Math.round(won.length/METAS.novas_contas*100));
-    return gaugeCard(o.name, 'Closer', pct, `${won.length} / ${METAS.novas_contas} contas`, `R$ ${fmt(wonVal)}`);
-  }).join('') || '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Sem vendedores</div></div>';
+  // Localiza usuário pelo nome parcial (case-insensitive)
+  const findUser = partial => {
+    const entry = Object.entries(nameMap).find(([, n]) =>
+      n && n.toLowerCase().includes(partial.toLowerCase())
+    );
+    return entry ? { id: entry[0], name: entry[1] } : null;
+  };
 
-  // Pré-Vendas
-  const preOwners = owners.filter(o=>pre.some(d=>d.owner_id==o.id));
-  document.getElementById('gauges-presales').innerHTML = preOwners.map(o => {
-    const reu = pre.filter(d=>d.owner_id==o.id&&d.status==='won'&&d.won_time&&new Date(d.won_time)>=monthStart);
-    const pct = Math.min(100, Math.round(reu.length/METAS.reunioes*100));
-    return gaugeCard(o.name, 'SDR / BDR', pct, `${reu.length} / ${METAS.reunioes} reuniões`, '');
-  }).join('') || '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Sem pré-vendedores</div></div>';
+  const mauricio = findUser('mauricio');
+  const erica    = findUser('erica');
 
-  // Animate gauges
-  requestAnimationFrame(() => animateGauges());
+  // Metas individuais fixas
+  const GOAL_CONTAS   = 16;
+  const GOAL_RECEITA  = 12000;
+  const GOAL_REUNIOES = 60;
+
+  const salesDeals = RAW.deals.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  const preDeals   = RAW.deals.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
+
+  // Gera buckets mensais para o período selecionado
+  const months = [];
+  let cur = new Date(from.getFullYear(), from.getMonth(), 1);
+  while (cur <= to) {
+    months.push({
+      label: MONTHS_PT[cur.getMonth()] + '/' + String(cur.getFullYear()).slice(2),
+      start: new Date(cur),
+      end:   new Date(cur.getFullYear(), cur.getMonth() + 1, 1),
+    });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  // Deals ganhos num bucket mensal para um usuário num pipeline
+  const wonInMonth = (deals, userId, month) =>
+    deals.filter(d => {
+      if (normId(d.owner_id) !== userId) return false;
+      if (d.status !== 'won') return false;
+      const t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+      return t && t >= month.start && t < month.end;
+    });
+
+  // ── Mauricio — Vendas ──────────────────────────────────────────────────────
+  if (mauricio) {
+    document.getElementById('ind-mauricio-title').textContent = mauricio.name + ' — Vendas';
+    const mCards = months.map(m => {
+      const won      = wonInMonth(salesDeals, mauricio.id, m);
+      const contas   = won.length;
+      const receita  = won.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
+      return indMonthCard(m.label, [
+        { label:'Novas Contas', val:contas,  goal:GOAL_CONTAS,   pct:Math.min(100,Math.round(contas/GOAL_CONTAS*100)),   fmtFn: v=>v },
+        { label:'Receita MRR',  val:receita, goal:GOAL_RECEITA,  pct:Math.min(100,Math.round(receita/GOAL_RECEITA*100)), fmtFn: v=>'R$'+fmt(v) },
+      ]);
+    }).join('');
+
+    // Totalizador do período (visível quando há mais de 1 mês)
+    const totContas   = months.reduce((s,m) => s + wonInMonth(salesDeals,mauricio.id,m).length, 0);
+    const totReceita  = months.reduce((s,m) => s + wonInMonth(salesDeals,mauricio.id,m).reduce((r,d)=>r+(parseFloat(d.value)||0),0), 0);
+    const nMonths     = months.length;
+    const summaryHtml = nMonths > 1 ? `
+      <div class="ind-total-card">
+        <div class="ind-total-item"><div class="ind-total-lbl">Total Contas (${nMonths} meses)</div>
+          <div class="ind-total-val">${totContas}</div>
+          <div class="ind-total-sub">Meta: ${GOAL_CONTAS*nMonths} · ${Math.round(totContas/(GOAL_CONTAS*nMonths)*100)}%</div></div>
+        <div class="ind-total-item"><div class="ind-total-lbl">Total Receita (${nMonths} meses)</div>
+          <div class="ind-total-val">R$${fmt(totReceita)}</div>
+          <div class="ind-total-sub">Meta: R$${fmt(GOAL_RECEITA*nMonths)} · ${Math.round(totReceita/(GOAL_RECEITA*nMonths)*100)}%</div></div>
+      </div>` : '';
+
+    document.getElementById('ind-mauricio-summary').innerHTML = summaryHtml;
+    document.getElementById('ind-mauricio').innerHTML = `<div class="ind-month-grid">${mCards}</div>`;
+  } else {
+    document.getElementById('ind-mauricio').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Usuário "Mauricio" não encontrado</div></div>';
+    document.getElementById('ind-mauricio-summary').innerHTML = '';
+  }
+
+  // ── Erica — Pré-Vendas ────────────────────────────────────────────────────
+  if (erica) {
+    document.getElementById('ind-erica-title').textContent = erica.name + ' — Pré-Vendas';
+    const eCards = months.map(m => {
+      const won      = wonInMonth(preDeals, erica.id, m);
+      const reunioes = won.length;
+      return indMonthCard(m.label, [
+        { label:'Reuniões Agendadas', val:reunioes, goal:GOAL_REUNIOES, pct:Math.min(100,Math.round(reunioes/GOAL_REUNIOES*100)), fmtFn: v=>v },
+      ]);
+    }).join('');
+
+    const totReunioes = months.reduce((s,m) => s + wonInMonth(preDeals,erica.id,m).length, 0);
+    const nMonths     = months.length;
+    const summaryHtml = nMonths > 1 ? `
+      <div class="ind-total-card">
+        <div class="ind-total-item"><div class="ind-total-lbl">Total Reuniões (${nMonths} meses)</div>
+          <div class="ind-total-val">${totReunioes}</div>
+          <div class="ind-total-sub">Meta: ${GOAL_REUNIOES*nMonths} · ${Math.round(totReunioes/(GOAL_REUNIOES*nMonths)*100)}%</div></div>
+      </div>` : '';
+
+    document.getElementById('ind-erica-summary').innerHTML = summaryHtml;
+    document.getElementById('ind-erica').innerHTML = `<div class="ind-month-grid">${eCards}</div>`;
+  } else {
+    document.getElementById('ind-erica').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Usuário "Erica" não encontrado</div></div>';
+    document.getElementById('ind-erica-summary').innerHTML = '';
+  }
+}
+
+// Helper: card de meta mensal com barras de progresso
+function indMonthCard(monthLabel, metrics) {
+  const metricsHtml = metrics.map(m => {
+    const color = m.pct >= 80 ? 'var(--success)' : m.pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    return `
+      <div class="ind-metric">
+        <div class="ind-metric-header">
+          <span class="ind-metric-label">${m.label}</span>
+          <span class="ind-metric-pct" style="color:${color}">${m.pct}%</span>
+        </div>
+        <div class="ind-metric-bar">
+          <div class="ind-metric-fill" style="width:${m.pct}%;background:${color}"></div>
+        </div>
+        <div class="ind-metric-vals">
+          <b>${m.fmtFn(m.val)}</b> / ${m.fmtFn(m.goal)}
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="ind-month-card">
+      <div class="ind-month-label">${monthLabel}</div>
+      ${metricsHtml}
+    </div>`;
 }
 
 function gaugeCard(name, role, pct, kpi1, kpi2) {
