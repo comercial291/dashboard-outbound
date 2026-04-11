@@ -2539,71 +2539,37 @@ function renderIndividual() {
   };
 
   const sectionTitle = txt => `<div class="section-title" style="margin-bottom:16px">${txt}</div>`;
-  const subLabel = txt => `<div style="margin:12px 0 8px;font-size:11px;font-weight:700;color:var(--text2);
-    text-transform:uppercase;letter-spacing:.6px">${txt}</div>`;
+  const monthLabel  = txt => `<div style="margin:4px 0 10px;font-size:11px;font-weight:700;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.7px;border-left:3px solid var(--primary);padding-left:8px">${txt}</div>`;
 
   let html = '';
 
-  // ══ Metas da Empresa ══════════════════════════════════════════════════════
+  // ══ Metas da Empresa — um gauge-grid por mês ══════════════════════════════
   html += sectionTitle('Metas da Empresa');
-  const cWon     = wonInPeriod(salesDeals, null);
-  const cContas  = cWon.length;
-  const cReceita = cWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-  html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:8px">`;
-  html += makeGauge('Faturamento Total', `EMPRESA · ${periodLbl}`, cReceita, GOAL_RECEITA*nMonths, v=>'R$'+fmtK(v));
-  html += makeGauge('Novas Contas',      `EMPRESA · ${periodLbl}`, cContas,  GOAL_CONTAS*nMonths,  v=>String(v));
-  html += `</div>`;
-  if (nMonths > 1) {
-    html += subLabel('Faturamento por mês');
-    html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">`;
-    months.forEach(m => {
-      const w = wonInPeriod(salesDeals.filter(d=>{
-        const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time);
-        return d.status==='won'&&t&&t>=m.start&&t<m.end;
-      }), null);
-      const r = salesDeals.filter(d=>{ const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time); return d.status==='won'&&t&&t>=m.start&&t<m.end; }).reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-      const cnt = salesDeals.filter(d=>{ const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time); return d.status==='won'&&t&&t>=m.start&&t<m.end; }).length;
-      html += miniGauge(m.label, r, GOAL_RECEITA, v=>'R$'+fmtK(v));
-    });
+  months.forEach(m => {
+    const cWon     = wonInMonth(salesDeals, null, m);
+    const cContas  = cWon.length;
+    const cReceita = cWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+    html += monthLabel(m.label);
+    html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:20px">`;
+    html += makeGauge('Faturamento Total', 'EMPRESA', cReceita, GOAL_RECEITA, v=>'R$'+fmtK(v));
+    html += makeGauge('Novas Contas',      'EMPRESA', cContas,  GOAL_CONTAS,  v=>String(v));
     html += `</div>`;
-    html += subLabel('Novas Contas por mês');
-    html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px">`;
-    months.forEach(m => {
-      const cnt = salesDeals.filter(d=>{ const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time); return d.status==='won'&&t&&t>=m.start&&t<m.end; }).length;
-      html += miniGauge(m.label, cnt, GOAL_CONTAS, v=>String(v));
-    });
-    html += `</div>`;
-  } else {
-    html += `<div style="margin-bottom:28px"></div>`;
-  }
+  });
 
-  // ══ Closers — Metas Individuais ═══════════════════════════════════════════
+  // ══ Closers — um gauge-grid por mês ══════════════════════════════════════
   html += sectionTitle('Closers — Metas Individuais');
   if (mauricio) {
-    const mWon     = wonInPeriod(salesDeals, mauricio.id);
-    const mContas  = mWon.length;
-    const mReceita = mWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-    html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:8px">`;
-    html += makeGauge('Novas Contas', `CLOSER · ${mauricio.name} · ${periodLbl}`, mContas,  GOAL_CONTAS*nMonths,  v=>String(v));
-    html += makeGauge('Receita MRR',  `CLOSER · ${mauricio.name} · ${periodLbl}`, mReceita, GOAL_RECEITA*nMonths, v=>'R$'+fmtK(v));
-    html += `</div>`;
-    if (nMonths > 1) {
-      html += subLabel('Novas Contas por mês');
-      html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">`;
-      months.forEach(m => {
-        html += miniGauge(m.label, wonInMonth(salesDeals,mauricio.id,m).length, GOAL_CONTAS, v=>String(v));
-      });
+    months.forEach(m => {
+      const mWon     = wonInMonth(salesDeals, mauricio.id, m);
+      const mContas  = mWon.length;
+      const mReceita = mWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+      html += monthLabel(m.label + ' · ' + mauricio.name.split(' ')[0]);
+      html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:20px">`;
+      html += makeGauge('Novas Contas', 'CLOSER', mContas,  GOAL_CONTAS,  v=>String(v));
+      html += makeGauge('Receita MRR',  'CLOSER', mReceita, GOAL_RECEITA, v=>'R$'+fmtK(v));
       html += `</div>`;
-      html += subLabel('Receita MRR por mês');
-      html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px">`;
-      months.forEach(m => {
-        const r = wonInMonth(salesDeals,mauricio.id,m).reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-        html += miniGauge(m.label, r, GOAL_RECEITA, v=>'R$'+fmtK(v));
-      });
-      html += `</div>`;
-    } else {
-      html += `<div style="margin-bottom:28px"></div>`;
-    }
+    });
   } else {
     html += `<div class="empty-state" style="margin-bottom:28px">
       <div class="empty-icon">👤</div>
@@ -2611,22 +2577,15 @@ function renderIndividual() {
     </div>`;
   }
 
-  // ══ Pré-Vendas — Metas Individuais ════════════════════════════════════════
+  // ══ Pré-Vendas — todos os meses side-by-side ══════════════════════════════
   html += sectionTitle('Pré-Vendas — Metas Individuais');
   if (erica) {
-    const eWon      = wonInPeriod(preDeals, erica.id);
-    const eReunioes = eWon.length;
-    html += `<div class="gauge-grid" style="max-width:280px;margin-bottom:8px">`;
-    html += makeGauge('Reuniões Agendadas', `SDR · ${erica.name} · ${periodLbl}`, eReunioes, GOAL_REUNIOES*nMonths, v=>String(v));
+    html += `<div class="gauge-grid" style="max-width:${months.length * 220}px;margin-bottom:16px">`;
+    months.forEach(m => {
+      const eReunioes = wonInMonth(preDeals, erica.id, m).length;
+      html += makeGauge('Reuniões Agendadas', `SDR · ${m.label}`, eReunioes, GOAL_REUNIOES, v=>String(v));
+    });
     html += `</div>`;
-    if (nMonths > 1) {
-      html += subLabel('Reuniões por mês');
-      html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">`;
-      months.forEach(m => {
-        html += miniGauge(m.label, wonInMonth(preDeals,erica.id,m).length, GOAL_REUNIOES, v=>String(v));
-      });
-      html += `</div>`;
-    }
   } else {
     html += `<div class="empty-state">
       <div class="empty-icon">👤</div>
