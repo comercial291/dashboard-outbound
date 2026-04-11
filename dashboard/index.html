@@ -751,27 +751,7 @@ tr:hover td{background:var(--primary-lt)}
 
   <!-- ══════════════════ TAB: INDIVIDUAL ══════════════════ -->
   <div class="tab-panel" id="tab-individual">
-
-    <!-- Mauricio — Vendas -->
-    <div class="ind-person">
-      <div class="ind-person-header">
-        <div class="section-title" id="ind-mauricio-title">Mauricio — Vendas</div>
-        <span class="ind-person-goal">Meta: 16 contas · R$ 12.000 receita / mês</span>
-      </div>
-      <div id="ind-mauricio-summary"></div>
-      <div id="ind-mauricio"></div>
-    </div>
-
-    <!-- Erica — Pré-Vendas -->
-    <div class="ind-person">
-      <div class="ind-person-header">
-        <div class="section-title" id="ind-erica-title">Erica — Pré-Vendas</div>
-        <span class="ind-person-goal">Meta: 60 reuniões / mês</span>
-      </div>
-      <div id="ind-erica-summary"></div>
-      <div id="ind-erica"></div>
-    </div>
-
+    <div id="ind-content"></div>
   </div>
 
   <!-- ══════════════════ TAB: MOTIVOS DE PERDA ══════════════════ -->
@@ -2343,30 +2323,40 @@ function renderAtividades() {
     }
   });
 
-  // ── Tabela: 50 atividades mais recentes do período filtrado ───────────────
+  // ── Tabela: 100 atividades mais recentes do período filtrado ─────────────
   const dealTitles = Object.fromEntries(RAW.deals.map(d=>[d.id,d.title]));
+
+  // Ordena: pendentes/atrasadas primeiro (mais urgentes), depois concluídas
   const recent = [...acts].sort((a,b) => {
+    // Não-feitas primeiro
+    if (!a.done && b.done)  return -1;
+    if (a.done  && !b.done) return 1;
+    // Dentro do mesmo grupo, data mais recente primeiro
     const ta = _parseDate(a.due_date) || new Date(0);
     const tb = _parseDate(b.due_date) || new Date(0);
     return tb - ta;
-  }).slice(0, 50);
+  }).slice(0, 100);
 
   const tbody = document.getElementById('tbody-atividades');
   tbody.innerHTML = recent.map(a => {
     const isDone = a.done;
-    const t = _parseDate(a.due_date);
-    const isLate = !isDone && t && t < today;
+    const t      = _parseDate(a.due_date);
+    const isLate = !isDone && t && t < todayStart;   // ← usa todayStart (meia-noite local)
     const statusClass = isDone ? 'badge-success' : (isLate ? 'badge-danger' : 'badge-warning');
-    const statusText  = isDone ? 'Feita' : (isLate ? 'Atrasada' : 'Pendente');
-    return `<tr>
+    const statusText  = isDone ? 'Feita'         : (isLate ? 'Atrasada'     : 'Pendente');
+    const rowStyle    = isLate ? 'background:rgba(239,68,68,.06)' : '';
+    const vendorName  = nameMap[normId(a.user_id)] || '–';
+    const dealTitle   = (dealTitles[a.deal_id]||'–').slice(0,35);
+    const dateStr     = a.due_date ? a.due_date.slice(0,10) : '–';
+    return `<tr style="${rowStyle}">
       <td><span class="badge badge-neutral">${a.type||'–'}</span></td>
-      <td>${(a.subject||'').slice(0,40)}</td>
-      <td>${nameMap[normId(a.user_id)]||'–'}</td>
-      <td style="font-size:11px;color:var(--text2)">${dealTitles[a.deal_id]||'–'}</td>
-      <td>${a.due_date||'–'}</td>
+      <td>${(a.subject||'–').slice(0,45)}</td>
+      <td>${vendorName}</td>
+      <td style="font-size:11px;color:var(--text2)">${dealTitle}</td>
+      <td style="font-size:12px">${dateStr}</td>
       <td><span class="badge ${statusClass}">${statusText}</span></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2)">Sem atividades no período</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">Sem atividades no período</td></tr>';
 }
 
 // ─── TAB: INDIVIDUAL ──────────────────────────────────────────────────────────
@@ -2376,7 +2366,7 @@ function renderIndividual() {
   const from = STATE.fromDate || new Date(now.getFullYear(), now.getMonth(), 1);
   const to   = STATE.toDate   || now;
 
-  // Mapa id → nome (users + deal owners)
+  // Mapa id → nome
   const nameMap = {};
   RAW.users.forEach(u => { if (u.id != null) nameMap[normId(u.id)] = u.name; });
   RAW.deals.forEach(d => {
@@ -2384,18 +2374,17 @@ function renderIndividual() {
     if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
   });
 
-  // Localiza usuário pelo nome parcial (case-insensitive)
+  // findUser com normalização de acentos
+  const normStr = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const findUser = partial => {
-    const entry = Object.entries(nameMap).find(([, n]) =>
-      n && n.toLowerCase().includes(partial.toLowerCase())
-    );
+    const p = normStr(partial);
+    const entry = Object.entries(nameMap).find(([,n]) => n && normStr(n).includes(p));
     return entry ? { id: entry[0], name: entry[1] } : null;
   };
 
   const mauricio = findUser('mauricio');
   const erica    = findUser('erica');
 
-  // Metas individuais fixas
   const GOAL_CONTAS   = 16;
   const GOAL_RECEITA  = 12000;
   const GOAL_REUNIOES = 60;
@@ -2403,7 +2392,7 @@ function renderIndividual() {
   const salesDeals = RAW.deals.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
   const preDeals   = RAW.deals.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
 
-  // Gera buckets mensais para o período selecionado
+  // Buckets mensais
   const months = [];
   let cur = new Date(from.getFullYear(), from.getMonth(), 1);
   while (cur <= to) {
@@ -2414,78 +2403,176 @@ function renderIndividual() {
     });
     cur.setMonth(cur.getMonth() + 1);
   }
+  const nMonths = months.length || 1;
 
-  // Deals ganhos num bucket mensal para um usuário num pipeline
+  // Deals ganhos no período para userId (null = todos)
+  const wonInPeriod = (deals, userId) =>
+    deals.filter(d => {
+      if (userId !== null && normId(d.owner_id) !== userId) return false;
+      if (d.status !== 'won') return false;
+      const t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+      return t && t >= from && t <= to;
+    });
+
   const wonInMonth = (deals, userId, month) =>
     deals.filter(d => {
-      if (normId(d.owner_id) !== userId) return false;
+      if (userId !== null && normId(d.owner_id) !== userId) return false;
       if (d.status !== 'won') return false;
       const t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
       return t && t >= month.start && t < month.end;
     });
 
-  // ── Mauricio — Vendas ──────────────────────────────────────────────────────
+  const periodLbl = nMonths > 1 ? `Meta acumulada (${nMonths} meses)` : 'Meta do mês';
+
+  // Helper: cria um gauge card de contagiro
+  const makeGauge = (kpiName, role, val, goal, fmtFn) => {
+    const rawPct = goal > 0 ? Math.round(val / goal * 100) : 0;
+    const pct    = Math.min(100, rawPct);
+    const color  = rawPct >= 80 ? 'var(--success)' : rawPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    const circ   = Math.PI * 50;
+    return `
+      <div class="gauge-card">
+        <div class="gauge-role">${role}</div>
+        <div class="gauge-name">${kpiName}</div>
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 120 60">
+            <path d="M10,60 A50,50 0 0,1 110,60" class="gauge-bg"/>
+            <path d="M10,60 A50,50 0 0,1 110,60" class="gauge-fill"
+              data-pct="${pct}" stroke="${color}"
+              stroke-dasharray="${circ}" stroke-dashoffset="${circ}"/>
+          </svg>
+          <div class="gauge-pct" style="color:${color}">${rawPct}%</div>
+        </div>
+        <div class="gauge-kpi"><span>Realiz.: ${fmtFn(val)}</span></div>
+        <div class="gauge-kpi" style="margin-top:2px"><span>Meta: ${fmtFn(goal)}</span></div>
+      </div>`;
+  };
+
+  // Helper: mini gauge para breakdown mensal
+  const miniGauge = (monthLabel, val, goal, fmtFn) => {
+    const rawPct = goal > 0 ? Math.round(val / goal * 100) : 0;
+    const pct    = Math.min(100, rawPct);
+    const color  = rawPct >= 80 ? 'var(--success)' : rawPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    const circ   = Math.PI * 50;
+    return `
+      <div style="background:var(--card);border-radius:10px;padding:14px 12px;text-align:center;
+                  min-width:120px;box-shadow:var(--shadow);flex:0 0 auto">
+        <div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:8px;
+                    text-transform:uppercase;letter-spacing:.5px">${monthLabel}</div>
+        <div style="position:relative;width:120px;height:60px;margin:0 auto 6px">
+          <svg style="width:120px;height:60px;overflow:visible" viewBox="0 0 120 60">
+            <path d="M10,60 A50,50 0 0,1 110,60" fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round"/>
+            <path d="M10,60 A50,50 0 0,1 110,60" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round"
+              class="gauge-fill" data-pct="${pct}"
+              stroke-dasharray="${circ}" stroke-dashoffset="${circ}"/>
+          </svg>
+          <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+                      font-size:16px;font-weight:800;color:${color}">${rawPct}%</div>
+        </div>
+        <div style="font-size:11px;color:var(--text2)">
+          <b style="color:var(--text)">${fmtFn(val)}</b> / ${fmtFn(goal)}
+        </div>
+      </div>`;
+  };
+
+  const sectionTitle = txt => `<div class="section-title" style="margin-bottom:16px">${txt}</div>`;
+  const subLabel = txt => `<div style="margin:12px 0 8px;font-size:11px;font-weight:700;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.6px">${txt}</div>`;
+
+  let html = '';
+
+  // ══ Metas da Empresa ══════════════════════════════════════════════════════
+  html += sectionTitle('Metas da Empresa');
+  const cWon     = wonInPeriod(salesDeals, null);
+  const cContas  = cWon.length;
+  const cReceita = cWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+  html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:8px">`;
+  html += makeGauge('Faturamento Total', `EMPRESA · ${periodLbl}`, cReceita, GOAL_RECEITA*nMonths, v=>'R$'+fmtK(v));
+  html += makeGauge('Novas Contas',      `EMPRESA · ${periodLbl}`, cContas,  GOAL_CONTAS*nMonths,  v=>String(v));
+  html += `</div>`;
+  if (nMonths > 1) {
+    html += subLabel('Faturamento por mês');
+    html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">`;
+    months.forEach(m => {
+      const w = wonInPeriod(salesDeals.filter(d=>{
+        const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time);
+        return d.status==='won'&&t&&t>=m.start&&t<m.end;
+      }), null);
+      const r = salesDeals.filter(d=>{ const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time); return d.status==='won'&&t&&t>=m.start&&t<m.end; }).reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+      const cnt = salesDeals.filter(d=>{ const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time); return d.status==='won'&&t&&t>=m.start&&t<m.end; }).length;
+      html += miniGauge(m.label, r, GOAL_RECEITA, v=>'R$'+fmtK(v));
+    });
+    html += `</div>`;
+    html += subLabel('Novas Contas por mês');
+    html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px">`;
+    months.forEach(m => {
+      const cnt = salesDeals.filter(d=>{ const t=_parseDate(d.won_time)||_parseDate(d.close_time)||_parseDate(d.update_time); return d.status==='won'&&t&&t>=m.start&&t<m.end; }).length;
+      html += miniGauge(m.label, cnt, GOAL_CONTAS, v=>String(v));
+    });
+    html += `</div>`;
+  } else {
+    html += `<div style="margin-bottom:28px"></div>`;
+  }
+
+  // ══ Closers — Metas Individuais ═══════════════════════════════════════════
+  html += sectionTitle('Closers — Metas Individuais');
   if (mauricio) {
-    document.getElementById('ind-mauricio-title').textContent = mauricio.name + ' — Vendas';
-    const mCards = months.map(m => {
-      const won      = wonInMonth(salesDeals, mauricio.id, m);
-      const contas   = won.length;
-      const receita  = won.reduce((s, d) => s + (parseFloat(d.value) || 0), 0);
-      return indMonthCard(m.label, [
-        { label:'Novas Contas', val:contas,  goal:GOAL_CONTAS,   pct:Math.min(100,Math.round(contas/GOAL_CONTAS*100)),   fmtFn: v=>v },
-        { label:'Receita MRR',  val:receita, goal:GOAL_RECEITA,  pct:Math.min(100,Math.round(receita/GOAL_RECEITA*100)), fmtFn: v=>'R$'+fmt(v) },
-      ]);
-    }).join('');
-
-    // Totalizador do período (visível quando há mais de 1 mês)
-    const totContas   = months.reduce((s,m) => s + wonInMonth(salesDeals,mauricio.id,m).length, 0);
-    const totReceita  = months.reduce((s,m) => s + wonInMonth(salesDeals,mauricio.id,m).reduce((r,d)=>r+(parseFloat(d.value)||0),0), 0);
-    const nMonths     = months.length;
-    const summaryHtml = nMonths > 1 ? `
-      <div class="ind-total-card">
-        <div class="ind-total-item"><div class="ind-total-lbl">Total Contas (${nMonths} meses)</div>
-          <div class="ind-total-val">${totContas}</div>
-          <div class="ind-total-sub">Meta: ${GOAL_CONTAS*nMonths} · ${Math.round(totContas/(GOAL_CONTAS*nMonths)*100)}%</div></div>
-        <div class="ind-total-item"><div class="ind-total-lbl">Total Receita (${nMonths} meses)</div>
-          <div class="ind-total-val">R$${fmt(totReceita)}</div>
-          <div class="ind-total-sub">Meta: R$${fmt(GOAL_RECEITA*nMonths)} · ${Math.round(totReceita/(GOAL_RECEITA*nMonths)*100)}%</div></div>
-      </div>` : '';
-
-    document.getElementById('ind-mauricio-summary').innerHTML = summaryHtml;
-    document.getElementById('ind-mauricio').innerHTML = `<div class="ind-month-grid">${mCards}</div>`;
+    const mWon     = wonInPeriod(salesDeals, mauricio.id);
+    const mContas  = mWon.length;
+    const mReceita = mWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+    html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:8px">`;
+    html += makeGauge('Novas Contas', `CLOSER · ${mauricio.name} · ${periodLbl}`, mContas,  GOAL_CONTAS*nMonths,  v=>String(v));
+    html += makeGauge('Receita MRR',  `CLOSER · ${mauricio.name} · ${periodLbl}`, mReceita, GOAL_RECEITA*nMonths, v=>'R$'+fmtK(v));
+    html += `</div>`;
+    if (nMonths > 1) {
+      html += subLabel('Novas Contas por mês');
+      html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">`;
+      months.forEach(m => {
+        html += miniGauge(m.label, wonInMonth(salesDeals,mauricio.id,m).length, GOAL_CONTAS, v=>String(v));
+      });
+      html += `</div>`;
+      html += subLabel('Receita MRR por mês');
+      html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px">`;
+      months.forEach(m => {
+        const r = wonInMonth(salesDeals,mauricio.id,m).reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+        html += miniGauge(m.label, r, GOAL_RECEITA, v=>'R$'+fmtK(v));
+      });
+      html += `</div>`;
+    } else {
+      html += `<div style="margin-bottom:28px"></div>`;
+    }
   } else {
-    document.getElementById('ind-mauricio').innerHTML =
-      '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Usuário "Mauricio" não encontrado</div></div>';
-    document.getElementById('ind-mauricio-summary').innerHTML = '';
+    html += `<div class="empty-state" style="margin-bottom:28px">
+      <div class="empty-icon">👤</div>
+      <div class="empty-title">Closer "Mauricio" não encontrado no Pipedrive</div>
+    </div>`;
   }
 
-  // ── Erica — Pré-Vendas ────────────────────────────────────────────────────
+  // ══ Pré-Vendas — Metas Individuais ════════════════════════════════════════
+  html += sectionTitle('Pré-Vendas — Metas Individuais');
   if (erica) {
-    document.getElementById('ind-erica-title').textContent = erica.name + ' — Pré-Vendas';
-    const eCards = months.map(m => {
-      const won      = wonInMonth(preDeals, erica.id, m);
-      const reunioes = won.length;
-      return indMonthCard(m.label, [
-        { label:'Reuniões Agendadas', val:reunioes, goal:GOAL_REUNIOES, pct:Math.min(100,Math.round(reunioes/GOAL_REUNIOES*100)), fmtFn: v=>v },
-      ]);
-    }).join('');
-
-    const totReunioes = months.reduce((s,m) => s + wonInMonth(preDeals,erica.id,m).length, 0);
-    const nMonths     = months.length;
-    const summaryHtml = nMonths > 1 ? `
-      <div class="ind-total-card">
-        <div class="ind-total-item"><div class="ind-total-lbl">Total Reuniões (${nMonths} meses)</div>
-          <div class="ind-total-val">${totReunioes}</div>
-          <div class="ind-total-sub">Meta: ${GOAL_REUNIOES*nMonths} · ${Math.round(totReunioes/(GOAL_REUNIOES*nMonths)*100)}%</div></div>
-      </div>` : '';
-
-    document.getElementById('ind-erica-summary').innerHTML = summaryHtml;
-    document.getElementById('ind-erica').innerHTML = `<div class="ind-month-grid">${eCards}</div>`;
+    const eWon      = wonInPeriod(preDeals, erica.id);
+    const eReunioes = eWon.length;
+    html += `<div class="gauge-grid" style="max-width:280px;margin-bottom:8px">`;
+    html += makeGauge('Reuniões Agendadas', `SDR · ${erica.name} · ${periodLbl}`, eReunioes, GOAL_REUNIOES*nMonths, v=>String(v));
+    html += `</div>`;
+    if (nMonths > 1) {
+      html += subLabel('Reuniões por mês');
+      html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">`;
+      months.forEach(m => {
+        html += miniGauge(m.label, wonInMonth(preDeals,erica.id,m).length, GOAL_REUNIOES, v=>String(v));
+      });
+      html += `</div>`;
+    }
   } else {
-    document.getElementById('ind-erica').innerHTML =
-      '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Usuário "Erica" não encontrado</div></div>';
-    document.getElementById('ind-erica-summary').innerHTML = '';
+    html += `<div class="empty-state">
+      <div class="empty-icon">👤</div>
+      <div class="empty-title">SDR "Erica" não encontrada no Pipedrive</div>
+    </div>`;
   }
+
+  document.getElementById('ind-content').innerHTML = html;
+  animateGauges();
 }
 
 // Helper: card de meta mensal com barras de progresso
@@ -2538,8 +2625,8 @@ function gaugeCard(name, role, pct, kpi1, kpi2) {
 
 function animateGauges() {
   document.querySelectorAll('.gauge-fill').forEach(path => {
-    const pct = parseInt(path.dataset.pct) || 0;
-    const circ = Math.PI * 50;
+    const pct  = parseInt(path.dataset.pct) || 0;
+    const circ = parseFloat(path.getAttribute('stroke-dasharray')) || Math.PI * 50;
     path.style.strokeDashoffset = String(circ * (1 - pct/100));
   });
 }
