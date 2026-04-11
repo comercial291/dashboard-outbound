@@ -2552,6 +2552,7 @@ function renderIndividual() {
     d.pipeline_id == SALES_PIPELINE_ID && d.status === 'won'
   );
   html += sectionTitle('Metas da Empresa');
+  html += `<div class="gauge-grid" style="max-width:${months.length * 440}px;margin-bottom:20px">`;
   months.forEach(m => {
     const cWon = empresaDeals.filter(d => {
       const t = _parseDate(d.won_time) || _parseDate(d.close_time);
@@ -2559,26 +2560,23 @@ function renderIndividual() {
     });
     const cContas  = cWon.length;
     const cReceita = cWon.reduce((s,d) => s + (parseFloat(d.value) || 0), 0);
-    html += monthLabel(m.label);
-    html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:20px">`;
-    html += makeGauge('Faturamento Total', 'EMPRESA', cReceita, GOAL_RECEITA, v => 'R$' + fmtK(v));
-    html += makeGauge('Novas Contas',      'EMPRESA', cContas,  GOAL_CONTAS,  v => String(v));
-    html += `</div>`;
+    html += makeGauge('Faturamento Total', `EMPRESA · ${m.label}`, cReceita, GOAL_RECEITA, v => 'R$' + fmtK(v));
+    html += makeGauge('Novas Contas',      `EMPRESA · ${m.label}`, cContas,  GOAL_CONTAS,  v => String(v));
   });
+  html += `</div>`;
 
-  // ══ Closers — um gauge-grid por mês ══════════════════════════════════════
+  // ══ Closers — todos os meses lado a lado ══════════════════════════════════
   html += sectionTitle('Closers — Metas Individuais');
   if (mauricio) {
+    html += `<div class="gauge-grid" style="max-width:${months.length * 440}px;margin-bottom:20px">`;
     months.forEach(m => {
       const mWon     = wonInMonth(salesDeals, mauricio.id, m);
       const mContas  = mWon.length;
       const mReceita = mWon.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-      html += monthLabel(m.label + ' · ' + mauricio.name.split(' ')[0]);
-      html += `<div class="gauge-grid" style="max-width:560px;margin-bottom:20px">`;
-      html += makeGauge('Novas Contas', 'CLOSER', mContas,  GOAL_CONTAS,  v=>String(v));
-      html += makeGauge('Receita MRR',  'CLOSER', mReceita, GOAL_RECEITA, v=>'R$'+fmtK(v));
-      html += `</div>`;
+      html += makeGauge('Novas Contas', `CLOSER · ${m.label}`, mContas,  GOAL_CONTAS,  v=>String(v));
+      html += makeGauge('Receita MRR',  `CLOSER · ${m.label}`, mReceita, GOAL_RECEITA, v=>'R$'+fmtK(v));
     });
+    html += `</div>`;
   } else {
     html += `<div class="empty-state" style="margin-bottom:28px">
       <div class="empty-icon">👤</div>
