@@ -776,21 +776,78 @@ tr:hover td{background:var(--primary-lt)}
 
   <!-- ══════════════════ TAB: MOTIVOS DE PERDA ══════════════════ -->
   <div class="tab-panel" id="tab-motivos">
+
+    <!-- KPIs -->
     <div class="kpi-row cols-3" style="margin-bottom:18px">
-      <div class="kcard danger"><div class="kcard-label">Total Perdidos</div><div class="kcard-value" id="mp-total">–</div><div class="kcard-sub" id="mp-value">R$ 0,00</div></div>
-      <div class="kcard warning"><div class="kcard-label">Principal Motivo</div><div class="kcard-value small" id="mp-motivo">–</div></div>
-      <div class="kcard neutral"><div class="kcard-label">Taxa de Perda</div><div class="kcard-value" id="mp-taxa">–</div></div>
+      <div class="kcard danger">
+        <div class="kcard-label">Total Perdidos</div>
+        <div class="kcard-value" id="mp-total">–</div>
+        <div class="kcard-sub">negócios perdidos</div>
+      </div>
+      <div class="kcard">
+        <div class="kcard-label">Motivos Distintos</div>
+        <div class="kcard-value" id="mp-distinct">–</div>
+        <div class="kcard-sub">categorias identificadas</div>
+      </div>
+      <div class="kcard warning">
+        <div class="kcard-label">Principal Motivo</div>
+        <div class="kcard-value small" id="mp-motivo">–</div>
+        <div class="kcard-sub" id="mp-motivo-count">–</div>
+      </div>
     </div>
-    <div class="grid-2">
+
+    <!-- Top 7 + Tendência -->
+    <div class="grid-2" style="margin-bottom:14px">
       <div class="card">
-        <div class="card-title" style="margin-bottom:12px">Distribuição de Motivos</div>
-        <div class="chart-wrap" style="height:260px"><canvas id="ch-motivos-pie"></canvas></div>
+        <div class="card-title" style="margin-bottom:16px">Top 7 Motivos de Perda</div>
+        <div id="mp-top7"></div>
       </div>
       <div class="card">
-        <div class="card-title" style="margin-bottom:12px">Perdas por Vendedor</div>
-        <div class="chart-wrap" style="height:260px"><canvas id="ch-motivos-vendor"></canvas></div>
+        <div class="card-title" style="margin-bottom:12px">Tendência por Motivo (meses)</div>
+        <div class="chart-wrap" style="height:280px"><canvas id="ch-motivos-trend"></canvas></div>
       </div>
     </div>
+
+    <!-- Tabela Analítica -->
+    <div class="section-header"><div class="section-title">Tabela Analítica</div></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="table-wrap">
+        <table id="tbl-motivos">
+          <thead><tr>
+            <th>Motivo</th><th>Volume</th><th>%</th><th>Tendência vs Mês Anterior</th>
+          </tr></thead>
+          <tbody id="tbody-motivos"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Categorização Automática -->
+    <div class="section-header"><div class="section-title">Categorização Automática</div></div>
+    <div class="grid-65" style="margin-bottom:14px">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:4px">Distribuição por Categoria
+          <span style="font-size:10px;font-weight:400;color:var(--text3);margin-left:6px">(clique para detalhar)</span>
+        </div>
+        <div id="mp-categories" style="padding-top:12px"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:12px">💡 Principais causas de perda</div>
+          <div id="mp-causes"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="margin-bottom:12px">⚡ Alertas Automáticos</div>
+          <div id="mp-alerts"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- canvases legacy (mantidos para destroyChart não quebrar) -->
+    <div style="display:none">
+      <canvas id="ch-motivos-pie"></canvas>
+      <canvas id="ch-motivos-vendor"></canvas>
+    </div>
+
   </div>
 
 </div><!-- /content -->
@@ -2489,47 +2546,197 @@ function animateGauges() {
 
 // ─── TAB: MOTIVOS DE PERDA ────────────────────────────────────────────────────
 function renderMotivos() {
-  const sales = filteredDeals().filter(d=>d.pipeline_id==SALES_PIPELINE_ID);
-  const lost  = dealsInRange(sales.filter(d=>d.status==='lost'), 'lost_time');
-  const won   = dealsInRange(sales.filter(d=>d.status==='won'), 'won_time');
-  const total = lost.length + won.length;
-  const taxa  = total>0 ? (lost.length/total*100).toFixed(1)+'%' : '0%';
-  const lostVal = lost.reduce((s,d)=>s+(parseFloat(d.value)||0),0);
+  const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
+  // ── Deals base ──────────────────────────────────────────────────────────────
+  const sales    = filteredDeals().filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+  const lost     = dealsInRangeSmart(sales.filter(d => d.status === 'lost'));
+  const allLost  = sales.filter(d => d.status === 'lost'); // sem filtro de data (para trend)
+  const totalLost = lost.length;
+
+  // ── Agrupa por motivo ────────────────────────────────────────────────────────
   const byReason = {};
   lost.forEach(d => {
-    const r = d.lost_reason||'Não informado';
+    const r = d.lost_reason && d.lost_reason.trim() ? d.lost_reason.trim() : 'Sem motivo';
     byReason[r] = (byReason[r]||0)+1;
   });
-  const reasons = Object.entries(byReason).sort((a,b)=>b[1]-a[1]);
-  const topReason = reasons[0]?.[0]||'–';
+  const sortedReasons = Object.entries(byReason).sort((a,b)=>b[1]-a[1]);
+  const topReason     = sortedReasons[0] || ['–', 0];
 
-  setText('mp-total',  lost.length);
-  setText('mp-value',  'R$ '+fmt(lostVal));
-  setText('mp-motivo', topReason.length>20?topReason.slice(0,20)+'…':topReason);
-  setText('mp-taxa',   taxa);
+  // ── KPIs ────────────────────────────────────────────────────────────────────
+  setText('mp-total',       totalLost);
+  setText('mp-distinct',    sortedReasons.length);
+  const topLabel = topReason[0].length > 22 ? topReason[0].slice(0,22)+'…' : topReason[0];
+  setText('mp-motivo',      topLabel);
+  setText('mp-motivo-count', topReason[1] + ' ocorrências');
 
-  destroyChart('ch-motivos-pie');
-  CHARTS['ch-motivos-pie'] = new Chart(document.getElementById('ch-motivos-pie').getContext('2d'), {
-    type:'doughnut',
-    data:{ labels:reasons.map(([r])=>r), datasets:[{ data:reasons.map(([,c])=>c),
-      backgroundColor:reasons.map((_,i)=>`hsla(${i*30+0},65%,55%,.8)`),
-      borderWidth:2, borderColor:'var(--card)'
-    }]},
-    options:{ plugins:{ legend:{ position:'right', labels:{ color:'var(--text2)', font:{size:11} } } } }
+  // ── Tendência vs Mês Anterior ────────────────────────────────────────────────
+  const refDate       = STATE.toDate || new Date();
+  const currMStart    = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+  const prevMStart    = new Date(currMStart); prevMStart.setMonth(prevMStart.getMonth()-1);
+  const prevMEnd      = new Date(currMStart);
+
+  const countInRange = (deals, start, end) => {
+    const m = {};
+    deals.forEach(d => {
+      const t = _parseDate(d.lost_time)||_parseDate(d.close_time)||_parseDate(d.update_time);
+      if (!t || t < start || t >= end) return;
+      const r = d.lost_reason && d.lost_reason.trim() ? d.lost_reason.trim() : 'Sem motivo';
+      m[r] = (m[r]||0)+1;
+    });
+    return m;
+  };
+  const currM = countInRange(sales.filter(d=>d.status==='lost'), currMStart, new Date(currMStart.getFullYear(),currMStart.getMonth()+1,1));
+  const prevM = countInRange(sales.filter(d=>d.status==='lost'), prevMStart, prevMEnd);
+
+  // ── Top 7 barras horizontais ─────────────────────────────────────────────────
+  const top7  = sortedReasons.slice(0,7);
+  const rest  = sortedReasons.slice(7).reduce((s,[,c])=>s+c,0);
+  const display = rest > 0 ? [...top7, ['Outros', rest]] : top7;
+  const maxVal  = display[0]?.[1] || 1;
+
+  document.getElementById('mp-top7').innerHTML = display.length ? display.map(([r,c]) => {
+    const pct  = totalLost > 0 ? (c/totalLost*100).toFixed(1) : '0.0';
+    const barW = Math.round(c/maxVal*100);
+    const col  = r === 'Outros' ? 'rgba(100,116,139,.55)' : 'rgba(239,68,68,.72)';
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+        <span style="color:var(--text)">${r.length>38?r.slice(0,38)+'…':r}</span>
+        <span style="color:var(--text2);font-weight:700;margin-left:8px">${pct}%</span>
+      </div>
+      <div style="height:9px;background:var(--border);border-radius:4px;overflow:hidden">
+        <div style="width:${barW}%;height:100%;background:${col};border-radius:4px;transition:width .5s ease"></div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty-state" style="padding:24px 0">Sem perdas no período</div>';
+
+  // ── Gráfico de Tendência (line) ───────────────────────────────────────────────
+  const from = STATE.fromDate;
+  const to   = STATE.toDate || new Date();
+  const monthBuckets = [];
+  let cur = new Date(from ? from.getFullYear() : to.getFullYear(), from ? from.getMonth() : to.getMonth()-5, 1);
+  while (cur <= to) {
+    monthBuckets.push({
+      label: MONTHS_PT[cur.getMonth()]+'/'+String(cur.getFullYear()).slice(2),
+      start: new Date(cur),
+      end:   new Date(cur.getFullYear(), cur.getMonth()+1, 1),
+    });
+    cur.setMonth(cur.getMonth()+1);
+  }
+  const top5 = sortedReasons.slice(0,5).map(([r])=>r);
+  const trendColors = ['#ef4444','#f97316','#3b82f6','#10b981','#8b5cf6'];
+
+  destroyChart('ch-motivos-trend');
+  if (monthBuckets.length && top5.length) {
+    CHARTS['ch-motivos-trend'] = new Chart(document.getElementById('ch-motivos-trend').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: monthBuckets.map(m=>m.label),
+        datasets: top5.map((reason,i)=>({
+          label: reason.length>22?reason.slice(0,22)+'…':reason,
+          data: monthBuckets.map(m=>
+            allLost.filter(d=>{
+              const t=_parseDate(d.lost_time)||_parseDate(d.close_time)||_parseDate(d.update_time);
+              const r=d.lost_reason&&d.lost_reason.trim()?d.lost_reason.trim():'Sem motivo';
+              return t&&t>=m.start&&t<m.end&&r===reason;
+            }).length
+          ),
+          borderColor: trendColors[i], backgroundColor: trendColors[i]+'22',
+          tension:0.3, pointRadius:4, borderWidth:2, fill:false,
+        }))
+      },
+      options: chartOptions({ yTitle:'' })
+    });
+  }
+
+  // ── Tabela Analítica ──────────────────────────────────────────────────────────
+  document.getElementById('tbody-motivos').innerHTML = sortedReasons.map(([r,c])=>{
+    const pct  = totalLost>0 ? (c/totalLost*100).toFixed(1) : '0.0';
+    const curr = currM[r]||0;
+    const prev = prevM[r]||0;
+    const diff = curr - prev;
+    let trendHtml;
+    if (prev===0 && curr>0) {
+      trendHtml = `<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px">NEW</span>`;
+    } else if (diff>0) {
+      trendHtml = `<span style="color:var(--danger)">↑ (${diff} ant.)</span>`;
+    } else if (diff<0) {
+      trendHtml = `<span style="color:var(--success)">↓ (${Math.abs(diff)} ant.)</span>`;
+    } else {
+      trendHtml = `<span style="color:var(--text3)">= igual</span>`;
+    }
+    return `<tr><td><strong>${r}</strong></td><td>${c}</td><td>${pct}%</td><td style="font-size:12px">${trendHtml}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Sem perdas no período</td></tr>';
+
+  // ── Categorização Automática ──────────────────────────────────────────────────
+  const CATS = [
+    { name:'Sem Motivo',   color:'#94a3b8', desc:'motivos não registrados no CRM',
+      match: r => !r||r.trim()===''||r.toLowerCase()==='sem motivo' },
+    { name:'Processo',     color:'#ef4444', desc:'alta incidência de falha na cadência e follow-up',
+      match: r => /cadência|cadencia|follow|fluxo|processo|abordagem/i.test(r) },
+    { name:'Qualificação', color:'#f59e0b', desc:'leads fora do perfil ideal (revisar ICP)',
+      match: r => /necessidade|latência|latencia|icp|segmento|duplicado|descartado|não interessado|nao interessado|não tem interesse|lead antigo|fora do perfil/i.test(r) },
+    { name:'Concorrência', color:'#8b5cf6', desc:'perdas para concorrentes',
+      match: r => /concorr|competitor|fechou com/i.test(r) },
+    { name:'Oferta',       color:'#3b82f6', desc:'produto ou oferta não aderente',
+      match: r => /preço|preco|orçamento|orcamento|produto|serviço|servico|não se aplica|nao se aplica|oferta/i.test(r) },
+    { name:'Dados',        color:'#06b6d4', desc:'problemas de dados e contato',
+      match: r => /contato|dados|incorreto|inexistente|inválido|invalido/i.test(r) },
+  ];
+  const catCounts = {};
+  CATS.forEach(c=>catCounts[c.name]=0);
+  catCounts['Outros']=0;
+  lost.forEach(d=>{
+    const r=d.lost_reason&&d.lost_reason.trim()?d.lost_reason.trim():'';
+    const cat=CATS.find(c=>c.match(r));
+    if(cat) catCounts[cat.name]++; else catCounts['Outros']++;
   });
+  const catEntries=[...CATS.map(c=>[c.name,catCounts[c.name],c.color]),['Outros',catCounts['Outros'],'#64748b']]
+    .filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
 
-  // Por vendedor
-  const owners = [...new Map(lost.map(d=>[d.owner_id,d.owner_name])).entries()].filter(([id])=>id);
-  destroyChart('ch-motivos-vendor');
-  CHARTS['ch-motivos-vendor'] = new Chart(document.getElementById('ch-motivos-vendor').getContext('2d'), {
-    type:'bar',
-    data:{ labels:owners.map(([,n])=>n), datasets:[{
-      label:'Perdidos', data:owners.map(([id])=>lost.filter(d=>d.owner_id==id).length),
-      backgroundColor:'rgba(239,68,68,.7)', borderRadius:4, borderSkipped:false
-    }]},
-    options:chartOptions({yTitle:'Perdidos'})
-  });
+  document.getElementById('mp-categories').innerHTML = catEntries.map(([name,count,color])=>{
+    const pct=totalLost>0?(count/totalLost*100).toFixed(1):'0.0';
+    const barW=totalLost>0?Math.min(100,count/totalLost*100):0;
+    return `<div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${name}</span>
+        <span style="font-size:12px;color:var(--text2)">${count} negócios · ${pct}%</span>
+      </div>
+      <div style="height:26px;background:var(--border);border-radius:6px;overflow:hidden;position:relative">
+        <div style="width:${barW}%;height:100%;background:${color};border-radius:6px;
+          display:flex;align-items:center;padding-left:${barW>8?10:0}px;transition:width .6s ease">
+          ${barW>12?`<span style="font-size:11px;font-weight:700;color:#fff">${pct}%</span>`:''}
+        </div>
+        ${barW<=12?`<span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;color:var(--text2)">${pct}%</span>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty-state">Sem dados</div>';
+
+  // Principais causas (top 3, excluindo Outros)
+  const topCats=catEntries.filter(([n])=>n!=='Outros').slice(0,3);
+  document.getElementById('mp-causes').innerHTML = topCats.map(([name,count,color],i)=>{
+    const cat=CATS.find(c=>c.name===name);
+    const pct=totalLost>0?Math.round(count/totalLost*100):0;
+    return `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:12px">
+      <span style="font-weight:800;color:var(--text3);min-width:18px">${i+1}°</span>
+      <div style="flex:1"><span style="font-weight:700;color:var(--text)">${name}:</span>
+        <span style="color:var(--text2)"> ${cat?cat.desc:''}</span></div>
+      <span style="font-weight:800;color:${color};white-space:nowrap">${pct}%</span>
+    </div>`;
+  }).join('') || '<div style="color:var(--text2);font-size:12px">Sem dados suficientes</div>';
+
+  // Alertas automáticos
+  const semPct   = totalLost>0?(catCounts['Sem Motivo']||0)/totalLost*100:0;
+  const procPct  = totalLost>0?(catCounts['Processo']||0)/totalLost*100:0;
+  const qualPct  = totalLost>0?(catCounts['Qualificação']||0)/totalLost*100:0;
+  const alerts=[];
+  if(semPct>50)  alerts.push('⚠️ Alta taxa sem motivo — padronizar preenchimento no CRM');
+  if(procPct>20) alerts.push('⚠️ Processo de cadência com alta taxa de abandono');
+  if(qualPct>10) alerts.push('⚠️ Muitos leads fora do ICP — revisar critérios de qualificação');
+  document.getElementById('mp-alerts').innerHTML = alerts.length
+    ? alerts.map(a=>`<div style="padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:12px;
+        border-left:3px solid var(--warning);background:rgba(245,158,11,.08)">${a}</div>`).join('')
+    : '<div style="color:var(--success);font-size:12px;padding:4px 0">✅ Nenhum alerta relevante</div>';
 }
 
 // ─── CHART FACTORY ────────────────────────────────────────────────────────────
