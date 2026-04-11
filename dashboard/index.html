@@ -803,7 +803,7 @@ tr:hover td{background:var(--primary-lt)}
         <div id="mp-top7"></div>
       </div>
       <div class="card">
-        <div class="card-title" style="margin-bottom:12px">Tendência por Motivo (meses)</div>
+        <div class="card-title" style="margin-bottom:12px">Crescimento por Motivo (quantidade mensal)</div>
         <div class="chart-wrap" style="height:280px"><canvas id="ch-motivos-trend"></canvas></div>
       </div>
     </div>
@@ -2642,10 +2642,10 @@ function renderMotivos() {
             }).length
           ),
           borderColor: trendColors[i], backgroundColor: trendColors[i]+'22',
-          tension:0.3, pointRadius:4, borderWidth:2, fill:false,
+          tension:0, pointRadius:5, pointHoverRadius:7, borderWidth:2.5, fill:false,
         }))
       },
-      options: chartOptions({ yTitle:'' })
+      options: chartOptions({ yTitle:'Quantidade', beginAtZero:true })
     });
   }
 
@@ -2740,7 +2740,7 @@ function renderMotivos() {
 }
 
 // ─── CHART FACTORY ────────────────────────────────────────────────────────────
-function chartOptions({ stacked=false, yTitle='', money=false } = {}) {
+function chartOptions({ stacked=false, yTitle='', money=false, beginAtZero=false } = {}) {
   const textColor  = getComputedStyle(document.documentElement).getPropertyValue('--text').trim()  || '#1e293b';
   const gridColor  = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() || 'rgba(0,0,0,.06)';
   return {
@@ -2760,10 +2760,12 @@ function chartOptions({ stacked=false, yTitle='', money=false } = {}) {
       x: { stacked, grid:{ color:gridColor }, ticks:{ color:textColor, font:{size:11} } },
       y: {
         stacked,
+        beginAtZero,
         grid:{ color:gridColor },
         ticks:{
           color:textColor, font:{size:11},
-          callback: v => money ? 'R$'+fmtK(v) : v
+          stepSize: 1,
+          callback: v => money ? 'R$'+fmtK(v) : (Number.isInteger(v) ? v : '')
         },
         title: yTitle ? { display:true, text:yTitle, color:textColor, font:{size:11} } : { display:false }
       }
