@@ -2481,7 +2481,9 @@ function renderIndividual() {
     deals.filter(d => {
       if (userId !== null && normId(d.owner_id) !== userId) return false;
       if (d.status !== 'won') return false;
-      const t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+      // Usa apenas won_time / close_time (data real de fechamento)
+      // NÃO usa update_time para evitar classificar deals no mês errado
+      const t = _parseDate(d.won_time) || _parseDate(d.close_time);
       return t && t >= month.start && t < month.end;
     });
 
@@ -2577,12 +2579,21 @@ function renderIndividual() {
     </div>`;
   }
 
-  // ══ Pré-Vendas — todos os meses side-by-side ══════════════════════════════
+  // ══ Pré-Vendas — Erica, apenas funil Pré-Vendas, todos os meses side-by-side
   html += sectionTitle('Pré-Vendas — Metas Individuais');
   if (erica) {
+    // Filtra SOMENTE deals do funil de Pré-Vendas pertencentes à Erica
+    const ericaPreDeals = RAW.deals.filter(d =>
+      d.pipeline_id == PRESALES_PIPELINE_ID && normId(d.owner_id) === erica.id
+    );
     html += `<div class="gauge-grid" style="max-width:${months.length * 220}px;margin-bottom:16px">`;
     months.forEach(m => {
-      const eReunioes = wonInMonth(preDeals, erica.id, m).length;
+      // Conta ganhos da Erica no funil de Pré-Vendas usando data de fechamento (won_time/close_time)
+      const eReunioes = ericaPreDeals.filter(d => {
+        if (d.status !== 'won') return false;
+        const t = _parseDate(d.won_time) || _parseDate(d.close_time);
+        return t && t >= m.start && t < m.end;
+      }).length;
       html += makeGauge('Reuniões Agendadas', `SDR · ${m.label}`, eReunioes, GOAL_REUNIOES, v=>String(v));
     });
     html += `</div>`;
