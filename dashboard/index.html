@@ -667,11 +667,11 @@ tr:hover td{background:var(--primary-lt)}
     <div class="section-header"><div class="section-title">Taxa de Conversão por Consultor</div></div>
     <div class="grid-2" style="margin-bottom:14px">
       <div class="card">
-        <div class="card-title" style="margin-bottom:10px;color:var(--primary)">Pré-Vendas — Leads → Reuniões Agendadas</div>
+        <div class="card-title" style="margin-bottom:10px;color:var(--primary)" id="eq-title-pre">Pré-Vendas — Leads → Reuniões Agendadas</div>
         <div class="chart-wrap" style="height:220px"><canvas id="ch-eq-conv-pre"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title" style="margin-bottom:10px;color:var(--success)">Vendas — Leads Recebidos → Ganhos</div>
+        <div class="card-title" style="margin-bottom:10px;color:var(--success)" id="eq-title-sales">Vendas — Leads Recebidos → Ganhos</div>
         <div class="chart-wrap" style="height:220px"><canvas id="ch-eq-conv-sales"></canvas></div>
       </div>
     </div>
@@ -1976,42 +1976,88 @@ function renderEquipe() {
   setText('eq-k-pipe',          'R$ '+fmt(tPipe));
   setText('eq-k-pipe-sub',      sumK('openCount') + ' deals em aberto');
 
-  const names = data.map(d => d.name.split(' ')[0]);
   const COLORS = ['#2563eb','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
 
-  // ── Chart 1a: Conversão Pré-Vendas por consultor ─────────────────────────
+  // ── Busca Erica e Mauricio pelo nome (normaliza acentos) ──────────────────
+  const normStrEq = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const allOwners = [...new Map(RAW.deals.map(d=>[String(d.owner_id),d.owner_name])).entries()]
+    .filter(([id])=>id&&id!=='undefined').map(([id,name])=>({id,name:name||'–'}));
+  const ericaOwner    = allOwners.find(o => normStrEq(o.name).includes('erica'));
+  const mauricioOwner = allOwners.find(o => normStrEq(o.name).includes('mauricio'));
+
+  // ── Buckets mensais do período selecionado ────────────────────────────────
+  const MPTS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const eqFrom = STATE.fromDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const eqTo   = STATE.toDate   || new Date();
+  const eqBuckets = [];
+  let eqCur = new Date(eqFrom.getFullYear(), eqFrom.getMonth(), 1);
+  while (eqCur <= eqTo) {
+    eqBuckets.push({
+      label: MPTS[eqCur.getMonth()] + '/' + String(eqCur.getFullYear()).slice(2),
+      start: new Date(eqCur),
+      end:   new Date(eqCur.getFullYear(), eqCur.getMonth() + 1, 1),
+    });
+    eqCur.setMonth(eqCur.getMonth() + 1);
+  }
+  const eqLabels = eqBuckets.map(m => m.label);
+
+  // Helper: leads recebidos num bucket (add_time)
+  const bucketEntered = (deals, userId) =>
+    eqBuckets.map(m => deals.filter(d => {
+      if (normId(d.owner_id) !== userId) return false;
+      const t = _parseDate(d.add_time);
+      return t && t >= m.start && t < m.end;
+    }).length);
+
+  // Helper: deals ganhos num bucket (won_time/close_time/update_time)
+  const bucketWon = (deals, userId) =>
+    eqBuckets.map(m => deals.filter(d => {
+      if (normId(d.owner_id) !== userId) return false;
+      if (d.status !== 'won') return false;
+      const t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+      return t && t >= m.start && t < m.end;
+    }).length);
+
+  const preAllDeals   = RAW.deals.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
+  const salesAllDeals = RAW.deals.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
+
+  // ── Chart 1a: Erica — Pré-Vendas por período ──────────────────────────────
+  const ericaEnteredPre = ericaOwner ? bucketEntered(preAllDeals, ericaOwner.id) : eqBuckets.map(()=>0);
+  const ericaWonPre     = ericaOwner ? bucketWon(preAllDeals, ericaOwner.id)     : eqBuckets.map(()=>0);
+  const ericaName       = ericaOwner ? ericaOwner.name.split(' ')[0] : 'Erica';
+  setText('eq-title-pre', `${ericaName} — Leads → Reuniões Agendadas`);
+
   destroyChart('ch-eq-conv-pre');
   CHARTS['ch-eq-conv-pre'] = new Chart(document.getElementById('ch-eq-conv-pre').getContext('2d'), {
     type: 'bar',
     data: {
-      labels: names,
+      labels: eqLabels,
       datasets: [
         {
           label: 'Leads Recebidos',
-          data: data.map(d => d.preEntered),
+          data: ericaEnteredPre,
           backgroundColor: 'rgba(37,99,235,.35)',
           borderRadius: 4, borderSkipped: false
         },
         {
           label: 'Reuniões Agendadas',
-          data: data.map(d => d.preWon),
+          data: ericaWonPre,
           backgroundColor: 'rgba(37,99,235,.85)',
           borderRadius: 4, borderSkipped: false
         }
       ]
     },
     options: {
-      ...chartOptions({ yTitle: 'Deals' }),
+      ...chartOptions({ yTitle: 'Deals', beginAtZero: true }),
       plugins: {
         ...chartOptions().plugins,
         tooltip: {
           callbacks: {
-            afterBody: (items) => {
+            afterBody: items => {
               const i = items[0]?.dataIndex;
               if (i === undefined) return;
-              const pct = data[i].preEntered > 0
-                ? (data[i].preWon / data[i].preEntered * 100).toFixed(1) + '%' : '–';
-              return ['Conv: ' + pct];
+              const e = ericaEnteredPre[i], w = ericaWonPre[i];
+              return ['Conv: ' + (e > 0 ? (w/e*100).toFixed(1)+'%' : '–')];
             }
           }
         }
@@ -2019,39 +2065,43 @@ function renderEquipe() {
     }
   });
 
-  // ── Chart 1b: Conversão Vendas por consultor ──────────────────────────────
+  // ── Chart 1b: Mauricio — Vendas por período ───────────────────────────────
+  const mauricioEnteredSales = mauricioOwner ? bucketEntered(salesAllDeals, mauricioOwner.id) : eqBuckets.map(()=>0);
+  const mauricioWonSales     = mauricioOwner ? bucketWon(salesAllDeals, mauricioOwner.id)     : eqBuckets.map(()=>0);
+  const mauricioName         = mauricioOwner ? mauricioOwner.name.split(' ')[0] : 'Maurício';
+  setText('eq-title-sales', `${mauricioName} — Leads Recebidos → Ganhos`);
+
   destroyChart('ch-eq-conv-sales');
   CHARTS['ch-eq-conv-sales'] = new Chart(document.getElementById('ch-eq-conv-sales').getContext('2d'), {
     type: 'bar',
     data: {
-      labels: names,
+      labels: eqLabels,
       datasets: [
         {
           label: 'Leads Recebidos',
-          data: data.map(d => d.salesEntered),
+          data: mauricioEnteredSales,
           backgroundColor: 'rgba(16,185,129,.3)',
           borderRadius: 4, borderSkipped: false
         },
         {
           label: 'Ganhos',
-          data: data.map(d => d.salesWon),
+          data: mauricioWonSales,
           backgroundColor: 'rgba(16,185,129,.85)',
           borderRadius: 4, borderSkipped: false
         }
       ]
     },
     options: {
-      ...chartOptions({ yTitle: 'Deals' }),
+      ...chartOptions({ yTitle: 'Deals', beginAtZero: true }),
       plugins: {
         ...chartOptions().plugins,
         tooltip: {
           callbacks: {
-            afterBody: (items) => {
+            afterBody: items => {
               const i = items[0]?.dataIndex;
               if (i === undefined) return;
-              const pct = data[i].salesEntered > 0
-                ? (data[i].salesWon / data[i].salesEntered * 100).toFixed(1) + '%' : '–';
-              return ['Conv: ' + pct];
+              const e = mauricioEnteredSales[i], w = mauricioWonSales[i];
+              return ['Conv: ' + (e > 0 ? (w/e*100).toFixed(1)+'%' : '–')];
             }
           }
         }
