@@ -1216,43 +1216,47 @@ function renderVisao() {
 }
 
 function renderAtividadesKPI() {
-  const vid  = STATE.vendor;
-  const from = STATE.fromDate;
-  const to   = STATE.toDate;
+  const vid   = STATE.vendor;
+  const from  = STATE.fromDate;
+  const to    = STATE.toDate;
   const today = new Date(); today.setHours(23,59,59,999);
 
-  // Filtra atividades pelo vendedor (user_id) se selecionado
-  // Compara também com owner_id dos deals para cobrir mapeamentos alternativos
-  const acts = RAW.activities.filter(a => {
-    if (vid === 'all') return true;
-    const uid = normId(a.user_id);
-    if (!uid) return false;
-    return uid === normId(vid);
+  // Build name map to resolve user_id → name
+  const nameMap = {};
+  RAW.users.forEach(u => { if (u.id != null) nameMap[normId(u.id)] = u.name; });
+  RAW.deals.forEach(d => {
+    const id = normId(d.owner_id);
+    if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
   });
 
-  // Realizadas no período: done=true, usa marked_as_done_time ou due_date como fallback
+  // Filter by vendor (user_id on activity must match selected vendor)
+  const acts = RAW.activities.filter(a => {
+    if (vid === 'all') return true;
+    return normId(a.user_id) === normId(vid);
+  });
+
+  // Realizadas no período: done=true, usa _parseDate para ambos os campos
   const done = acts.filter(a => {
-    if (a.done !== true && a.done !== 1) return false;
-    const t = a.marked_as_done_time
-      ? new Date(a.marked_as_done_time)
-      : (a.due_date ? new Date(a.due_date + 'T12:00:00') : null);
+    if (!a.done) return false;
+    // Prefere marked_as_done_time; fallback para due_date
+    const t = _parseDate(a.marked_as_done_time) || _parseDate(a.due_date);
     if (!t) return false;
     if (from && t < from) return false;
     if (to   && t > to)   return false;
     return true;
   });
 
-  // Atrasadas: done=false e due_date < hoje (sem filtro de período)
+  // Atrasadas: done=false e due_date < hoje
   const late = acts.filter(a => {
-    if (a.done === true || a.done === 1) return false;
-    const t = a.due_date ? new Date(a.due_date + 'T23:59:59') : null;
+    if (a.done) return false;
+    const t = _parseDate(a.due_date);
     return t && t < today;
   });
 
-  // Pendentes: done=false e due_date >= hoje (mostra todos os pendentes futuros)
+  // Pendentes: done=false e due_date >= hoje
   const pend = acts.filter(a => {
-    if (a.done === true || a.done === 1) return false;
-    const t = a.due_date ? new Date(a.due_date + 'T00:00:00') : null;
+    if (a.done) return false;
+    const t = _parseDate(a.due_date);
     return t && t >= today;
   });
 
@@ -1260,11 +1264,11 @@ function renderAtividadesKPI() {
   const taxa  = total > 0 ? (done.length / total * 100).toFixed(0) + '%' : '–';
 
   setText('act-done',     done.length);
-  setText('act-done-sub', `concluídas no período`);
+  setText('act-done-sub', 'concluídas no período');
   setText('act-late',     late.length);
-  setText('act-late-sub', `vencidas e não concluídas`);
+  setText('act-late-sub', 'vencidas e não concluídas');
   setText('act-pend',     pend.length);
-  setText('act-pend-sub', `a vencer no período`);
+  setText('act-pend-sub', 'a vencer no período');
   setText('act-taxa',     taxa);
   setText('act-taxa-sub', `${done.length} realizadas / ${total} agendadas`);
 }
@@ -2075,64 +2079,150 @@ function renderEquipe() {
 
 // ─── TAB: ATIVIDADES ──────────────────────────────────────────────────────────
 function renderAtividades() {
-  const acts = RAW.activities;
-  const now = new Date();
-  const done  = acts.filter(a=>a.done);
-  const pend  = acts.filter(a=>!a.done);
-  const late  = pend.filter(a=>a.due_date&&new Date(a.due_date)<now);
+  const vid  = STATE.vendor;
+  const from = STATE.fromDate;
+  const to   = STATE.toDate;
+  const now  = new Date();
+  const today = new Date(); today.setHours(23,59,59,999);
+
+  // Mapa id → nome (users + owners dos deals para cobrir usuários sem acesso)
+  const nameMap = {};
+  RAW.users.forEach(u => { if (u.id != null) nameMap[normId(u.id)] = u.name; });
+  RAW.deals.forEach(d => {
+    const id = normId(d.owner_id);
+    if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
+  });
+
+  // ── Filtro principal: vendedor + período (due_date) ───────────────────────
+  const acts = RAW.activities.filter(a => {
+    // Filtro de vendedor
+    if (vid !== 'all' && normId(a.user_id) !== normId(vid)) return false;
+    // Filtro de período: usa due_date como referência temporal da atividade
+    if (from || to) {
+      const t = _parseDate(a.due_date);
+      if (!t) return false;
+      if (from && t < from) return false;
+      if (to   && t > to)   return false;
+    }
+    return true;
+  });
+
+  // ── KPIs da aba ─────────────────────────────────────────────────────────
+  const doneFilt = acts.filter(a => a.done);
+  const pendFilt = acts.filter(a => !a.done && !(_parseDate(a.due_date) < today));
+  const lateFilt = acts.filter(a => !a.done && _parseDate(a.due_date) < today);
 
   setText('at-total', acts.length);
-  setText('at-done',  done.length);
-  setText('at-pend',  pend.length);
-  setText('at-late',  late.length);
+  setText('at-done',  doneFilt.length);
+  setText('at-pend',  pendFilt.length);
+  setText('at-late',  lateFilt.length);
 
-  // Por tipo
+  // ── Chart 1: Atividades por Tipo (barras verticais) ──────────────────────
   const byType = {};
-  acts.forEach(a => { byType[a.type||'outros'] = (byType[a.type||'outros']||0)+1; });
-  const typeEntries = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  acts.forEach(a => {
+    const t = a.type || 'outros';
+    byType[t] = (byType[t]||0)+1;
+  });
+  const typeEntries = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,10);
 
   destroyChart('ch-at-tipo');
   CHARTS['ch-at-tipo'] = new Chart(document.getElementById('ch-at-tipo').getContext('2d'), {
-    type:'doughnut',
-    data:{ labels:typeEntries.map(([t])=>t), datasets:[{ data:typeEntries.map(([,c])=>c),
-      backgroundColor:typeEntries.map((_,i)=>`hsla(${i*37+200},65%,55%,.8)`),
-      borderWidth:2, borderColor:'var(--card)'
-    }]},
-    options:{ plugins:{ legend:{ position:'right', labels:{ color:'var(--text2)', font:{size:11} } } } }
+    type: 'bar',
+    data: {
+      labels: typeEntries.map(([t]) => t),
+      datasets: [{
+        label: 'Atividades',
+        data: typeEntries.map(([,c]) => c),
+        backgroundColor: typeEntries.map((_, i) => `hsla(${i*37+200},65%,55%,.82)`),
+        borderRadius: 5, borderSkipped: false
+      }]
+    },
+    options: chartOptions({ yTitle: 'Qtd' })
   });
 
-  // Por vendedor
-  const usersMap = Object.fromEntries(RAW.users.map(u=>[u.id,u.name]));
-  const byUser = {};
-  acts.forEach(a => {
-    const name = usersMap[a.user_id]||'–';
-    byUser[name] = (byUser[name]||0)+1;
-  });
-  const userEntries = Object.entries(byUser).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  // ── Chart 2: Atividades por Consultor — Concluídas / Pendentes / Atrasadas ─
+  // Todos os consultores visíveis no filtro atual
+  const consultantIds = vid !== 'all'
+    ? [normId(vid)]
+    : [...new Set(acts.map(a => normId(a.user_id)).filter(Boolean))];
+
+  const cData = consultantIds.map(uid => {
+    const userActs = acts.filter(a => normId(a.user_id) === uid);
+    const doneC = userActs.filter(a => a.done).length;
+    const lateC = userActs.filter(a => !a.done && _parseDate(a.due_date) < today).length;
+    const pendC = userActs.filter(a => !a.done && !(_parseDate(a.due_date) < today)).length;
+    return { name: nameMap[uid] || uid, doneC, lateC, pendC };
+  }).sort((a, b) => (b.doneC+b.lateC+b.pendC) - (a.doneC+a.lateC+a.pendC));
 
   destroyChart('ch-at-vendor');
   CHARTS['ch-at-vendor'] = new Chart(document.getElementById('ch-at-vendor').getContext('2d'), {
-    type:'bar',
-    data:{ labels:userEntries.map(([n])=>n), datasets:[{
-      label:'Atividades', data:userEntries.map(([,c])=>c),
-      backgroundColor:'rgba(99,102,241,.75)', borderRadius:4, borderSkipped:false
-    }]},
-    options:{ ...chartOptions({yTitle:'Atividades'}), indexAxis:'y' }
+    type: 'bar',
+    data: {
+      labels: cData.map(d => d.name.split(' ')[0]),
+      datasets: [
+        {
+          label: 'Concluídas',
+          data: cData.map(d => d.doneC),
+          backgroundColor: 'rgba(16,185,129,.82)',
+          borderRadius: 4, borderSkipped: false
+        },
+        {
+          label: 'Pendentes',
+          data: cData.map(d => d.pendC),
+          backgroundColor: 'rgba(245,158,11,.82)',
+          borderRadius: 4, borderSkipped: false
+        },
+        {
+          label: 'Atrasadas',
+          data: cData.map(d => d.lateC),
+          backgroundColor: 'rgba(239,68,68,.82)',
+          borderRadius: 4, borderSkipped: false
+        }
+      ]
+    },
+    options: {
+      ...chartOptions({ stacked: false, yTitle: 'Atividades' }),
+      plugins: {
+        ...chartOptions().plugins,
+        tooltip: {
+          callbacks: {
+            afterBody: items => {
+              const i = items[0]?.dataIndex;
+              if (i === undefined) return;
+              const d = cData[i];
+              const tot = d.doneC + d.lateC + d.pendC;
+              return [`Total: ${tot}`];
+            }
+          }
+        }
+      }
+    }
   });
 
-  // Tabela (50 mais recentes)
+  // ── Tabela: 50 atividades mais recentes do período filtrado ───────────────
   const dealTitles = Object.fromEntries(RAW.deals.map(d=>[d.id,d.title]));
-  const recent = [...acts].sort((a,b)=>new Date(b.add_time)-new Date(a.add_time)).slice(0,50);
-  const tbody  = document.getElementById('tbody-atividades');
-  tbody.innerHTML = recent.map(a=>`
-    <tr>
+  const recent = [...acts].sort((a,b) => {
+    const ta = _parseDate(a.due_date) || new Date(0);
+    const tb = _parseDate(b.due_date) || new Date(0);
+    return tb - ta;
+  }).slice(0, 50);
+
+  const tbody = document.getElementById('tbody-atividades');
+  tbody.innerHTML = recent.map(a => {
+    const isDone = a.done;
+    const t = _parseDate(a.due_date);
+    const isLate = !isDone && t && t < today;
+    const statusClass = isDone ? 'badge-success' : (isLate ? 'badge-danger' : 'badge-warning');
+    const statusText  = isDone ? 'Feita' : (isLate ? 'Atrasada' : 'Pendente');
+    return `<tr>
       <td><span class="badge badge-neutral">${a.type||'–'}</span></td>
       <td>${(a.subject||'').slice(0,40)}</td>
-      <td>${usersMap[a.user_id]||'–'}</td>
+      <td>${nameMap[normId(a.user_id)]||'–'}</td>
       <td style="font-size:11px;color:var(--text2)">${dealTitles[a.deal_id]||'–'}</td>
       <td>${a.due_date||'–'}</td>
-      <td><span class="badge ${a.done?'badge-success':'badge-warning'}">${a.done?'Feita':'Pendente'}</span></td>
-    </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2)">Sem atividades</td></tr>';
+      <td><span class="badge ${statusClass}">${statusText}</span></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2)">Sem atividades no período</td></tr>';
 }
 
 // ─── TAB: INDIVIDUAL ──────────────────────────────────────────────────────────
