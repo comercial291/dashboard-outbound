@@ -1344,26 +1344,23 @@ function renderAtividadesKPI() {
   const vid        = STATE.vendor;
   const from       = STATE.fromDate;
   const to         = STATE.toDate;
-  const todayStart = new Date(); todayStart.setHours(0,0,0,0); // meia-noite local
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
 
-  // Build name map to resolve user_id → name
-  const nameMap = {};
-  RAW.users.forEach(u => { if (u.id != null) nameMap[normId(u.id)] = u.name; });
-  RAW.deals.forEach(d => {
-    const id = normId(d.owner_id);
-    if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
-  });
-
-  // Filter by vendor (user_id on activity must match selected vendor)
-  const acts = RAW.activities.filter(a => {
+  // Para a Visão Geral sempre mostrar atividades do time, ignoramos o filtro de
+  // vendedor quando ele não tem atividades atribuídas no Pipedrive
+  // (atividades ficam sob o responsável — Leonardo — não sob o consultor de deals)
+  let acts = RAW.activities.filter(a => {
     if (vid === 'all') return true;
     return normId(a.user_id) === normId(vid);
   });
+  // Se o vendedor selecionado não tem atividades, cai para visão do time completo
+  if (acts.length === 0 && vid !== 'all') {
+    acts = RAW.activities;
+  }
 
-  // Realizadas no período: done=true, usa _parseDate para ambos os campos
+  // Realizadas no período: filtra por marked_as_done_time (ou due_date) no range
   const done = acts.filter(a => {
     if (!a.done) return false;
-    // Prefere marked_as_done_time; fallback para due_date
     const t = _parseDate(a.marked_as_done_time) || _parseDate(a.due_date);
     if (!t) return false;
     if (from && t < from) return false;
@@ -1371,22 +1368,29 @@ function renderAtividadesKPI() {
     return true;
   });
 
-  // Atrasadas: done=false e due_date < hoje (antes da meia-noite de hoje)
+  // Atrasadas no período: due_date está no período selecionado E já passou da meia-noite
   const late = acts.filter(a => {
     if (a.done) return false;
     const t = _parseDate(a.due_date);
-    return t && t < todayStart;
+    if (!t || t >= todayStart) return false;
+    if (from && t < from) return false;
+    if (to   && t > to)   return false;
+    return true;
   });
 
-  // Pendentes: done=false e due_date >= hoje (hoje ou no futuro)
+  // Pendentes no período: due_date está no período E ainda não chegou
   const pend = acts.filter(a => {
     if (a.done) return false;
     const t = _parseDate(a.due_date);
-    return t && t >= todayStart;
+    if (!t || t < todayStart) return false;
+    if (from && t < from) return false;
+    if (to   && t > to)   return false;
+    return true;
   });
 
-  const total = done.length + pend.length;
-  const taxa  = total > 0 ? (done.length / total * 100).toFixed(0) + '%' : '–';
+  const total = done.length + late.length + pend.length;
+  const taxa  = (done.length + pend.length) > 0
+    ? (done.length / (done.length + pend.length) * 100).toFixed(0) + '%' : '–';
 
   setText('act-done',     done.length);
   setText('act-done-sub', 'concluídas no período');
@@ -1395,7 +1399,7 @@ function renderAtividadesKPI() {
   setText('act-pend',     pend.length);
   setText('act-pend-sub', 'a vencer no período');
   setText('act-taxa',     taxa);
-  setText('act-taxa-sub', `${done.length} realizadas / ${total} agendadas`);
+  setText('act-taxa-sub', `${done.length} realizadas / ${done.length + pend.length} agendadas`);
 }
 
 // Gera sempre 7 períodos terminando em `to`
@@ -1910,30 +1914,39 @@ function renderEquipe() {
     const oPre   = preAll.filter(d  => normId(d.owner_id) === o.id);
     const oSales = salesAll.filter(d => normId(d.owner_id) === o.id);
 
-    // Pré-Vendas: leads criados no período → reuniões agendadas (won Pré)
-    const preEntered  = dealsInRange(oPre, 'add_time').length;
+    // Pré-Vendas: leads no período (adicionados no período) + abertos antes do período
+    const preAddedIn  = dealsInRange(oPre, 'add_time');
+    const preAddedIds = new Set(preAddedIn.map(d => d.id));
+    const preOpenOld  = oPre.filter(d => d.status === 'open' && !preAddedIds.has(d.id));
+    const preEntered  = preAddedIn.length + preOpenOld.length;
     const preWonArr   = dealsInRange(oPre.filter(d => d.status==='won'), 'won_time');
     const preConvPct  = preEntered > 0 ? preWonArr.length / preEntered * 100 : 0;
 
-    // Vendas: leads criados no período → ganhos (won Sales)
-    const salesEntered = dealsInRange(oSales, 'add_time').length;
-    const salesWonArr  = dealsInRangeSmart(oSales.filter(d => d.status==='won'));
-    const salesLostArr = dealsInRangeSmart(oSales.filter(d => d.status==='lost'));
-    const salesConvPct = salesEntered > 0 ? salesWonArr.length / salesEntered * 100 : 0;
-    const wonVal       = salesWonArr.reduce((s,d) => s+(parseFloat(d.value)||0), 0);
-    const ticket       = salesWonArr.length > 0 ? wonVal / salesWonArr.length : 0;
+    // Vendas: leads no período + abertos antes do período
+    const salesAddedIn  = dealsInRange(oSales, 'add_time');
+    const salesAddedIds = new Set(salesAddedIn.map(d => d.id));
+    const salesOpenOld  = oSales.filter(d => d.status === 'open' && !salesAddedIds.has(d.id));
+    const salesEntered  = salesAddedIn.length + salesOpenOld.length;
+    const salesWonArr   = dealsInRangeSmart(oSales.filter(d => d.status==='won'));
+    const salesLostArr  = dealsInRangeSmart(oSales.filter(d => d.status==='lost'));
+    const salesConvPct  = salesEntered > 0 ? salesWonArr.length / salesEntered * 100 : 0;
+    const wonVal        = salesWonArr.reduce((s,d) => s+(parseFloat(d.value)||0), 0);
+    const ticket        = salesWonArr.length > 0 ? wonVal / salesWonArr.length : 0;
 
     // Pipeline ativo (deals abertos em Vendas)
     const openDeals  = oSales.filter(d => d.status==='open');
     const pipeVal    = openDeals.reduce((s,d) => s+(parseFloat(d.value)||0), 0);
 
-    // No-Show: stage 58 = no-show; reuniões = stage 7 + stage 58
-    const noShowDeals   = oSales.filter(d => normId(d.stage_id) === String(NO_SHOW_STAGE_ID));
-    const meetingDeals  = oSales.filter(d =>
-      normId(d.stage_id) === String(SALES_MEETING_STAGE_ID) ||
-      normId(d.stage_id) === String(NO_SHOW_STAGE_ID)
-    );
-    const noShowRate    = meetingDeals.length > 0
+    // No-Show: filtra apenas deals adicionados no período selecionado
+    // para evitar acúmulo histórico de no-shows inflacionando a taxa
+    const noShowDeals  = dealsInRange(
+      oSales.filter(d => normId(d.stage_id) === String(NO_SHOW_STAGE_ID)), 'add_time');
+    const meetingDeals = dealsInRange(
+      oSales.filter(d =>
+        normId(d.stage_id) === String(SALES_MEETING_STAGE_ID) ||
+        normId(d.stage_id) === String(NO_SHOW_STAGE_ID)
+      ), 'add_time');
+    const noShowRate   = meetingDeals.length > 0
       ? noShowDeals.length / meetingDeals.length * 100 : 0;
 
     // Motivos de perda aggregados
