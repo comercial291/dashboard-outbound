@@ -951,7 +951,30 @@ function loadMockData() {
     {id:10, name:'Negociação',         pipeline_id:SALES_PIPELINE_ID,    order_nr:3},
     {id:14, name:'Contrato na Rua',    pipeline_id:SALES_PIPELINE_ID,    order_nr:4},
   ];
-  RAW = { deals, activities:[], users, stages, lastUpdated: now.toISOString() };
+  // Mock de atividades para demonstração (últimos 30 dias)
+  const actTypes = ['call','whatsapp','email','linkedin','meeting','task'];
+  const activities = [];
+  let aid = 1;
+  for (let i = 0; i < 80; i++) {
+    const daysAgo  = Math.floor(Math.random() * 60);
+    const dueDate  = new Date(now); dueDate.setDate(dueDate.getDate() - daysAgo);
+    const isDone   = Math.random() > 0.35;
+    const ownIdx   = Math.floor(Math.random() * names.length);
+    const doneDt   = isDone ? new Date(dueDate.getTime() + Math.random()*86400000*2) : null;
+    activities.push({
+      id: aid++,
+      type: actTypes[Math.floor(Math.random() * actTypes.length)],
+      subject: 'Atividade demo #' + aid,
+      done: isDone,
+      due_date: dueDate.toISOString().slice(0,10),
+      due_time: '09:00',
+      deal_id: Math.floor(Math.random() * id) + 1,
+      user_id: ownIdx + 1,
+      add_time: dueDate.toISOString(),
+      marked_as_done_time: doneDt ? doneDt.toISOString() : '',
+    });
+  }
+  RAW = { deals, activities, users, stages, lastUpdated: now.toISOString() };
   document.getElementById('last-updated').textContent = 'Modo Demo — dados simulados';
   populateVendorFilter();
   renderAll();
@@ -979,14 +1002,21 @@ function populateVendorFilter() {
     if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
   });
 
-  // 3. Usa todos que estão no nameMap (users + owner dos deals)
-  // Se owner_id dos deals estiver vazio (problema de sync), cai só nos users
-  const idsWithDeals = new Set(RAW.deals.map(d => normId(d.owner_id)).filter(Boolean));
+  // 3. Complementa com user_id das atividades (usuários sem deals também aparecem)
+  RAW.activities.forEach(a => {
+    const id = normId(a.user_id);
+    if (id && !nameMap[id]) {
+      // tenta achar o nome na lista de users
+      const u = RAW.users.find(u => normId(u.id) === id);
+      if (u && u.name) nameMap[id] = u.name;
+    }
+  });
+
+  // 4. Mostra SEMPRE todos os usuários presentes em RAW.users
+  //    + qualquer owner de deal ou atividade não coberto pela lista de users
   const allIds = new Set([...Object.keys(nameMap)]);
-  // Prioriza quem tem deal; se ninguém tem deal (dados antigos), mostra todos
-  const filterIds = idsWithDeals.size > 0 ? idsWithDeals : allIds;
   const owners = Object.entries(nameMap)
-    .filter(([id]) => filterIds.has(id))
+    .filter(([id]) => allIds.has(id))
     .sort((a, b) => a[1].localeCompare(b[1]));
 
   owners.forEach(([id, name]) => {
