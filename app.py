@@ -86,6 +86,15 @@ def norm_deal(d: dict, pipeline_id: int, stages_map: dict) -> dict:
     }
 
 
+def _extract_id(val):
+    """Extrai ID numérico de campo que pode ser int ou dict {id: ...}."""
+    if val is None:
+        return None
+    if isinstance(val, dict):
+        return val.get("id")
+    return val
+
+
 def norm_activity(a: dict) -> dict:
     return {
         "id":                  a.get("id"),
@@ -94,8 +103,10 @@ def norm_activity(a: dict) -> dict:
         "done":                bool(a.get("done")),
         "due_date":            a.get("due_date", ""),
         "due_time":            a.get("due_time", ""),
-        "deal_id":             a.get("deal_id"),
-        "user_id":             a.get("user_id"),
+        "deal_id":             _extract_id(a.get("deal_id")),
+        "user_id":             _extract_id(a.get("user_id")),
+        "assigned_to_user_id": _extract_id(a.get("assigned_to_user_id")),
+        "created_by_user_id":  _extract_id(a.get("created_by_user_id")),
         "add_time":            a.get("add_time", ""),
         "marked_as_done_time": a.get("marked_as_done_time") or "",
     }
@@ -140,11 +151,19 @@ def fetch_all_data() -> dict:
     users = [norm_user(u) for u in (pd_get("users").get("data") or [])]
 
     # 4. Atividades (últimos 365 dias, pendentes e concluídas)
+    # Mapa deal_id → owner_id para enriquecer cada atividade com o dono do deal
+    deal_owner_map = {str(d["id"]): str(d["owner_id"]) for d in deals if d.get("id") and d.get("owner_id")}
+
     since = (datetime.utcnow() - timedelta(days=365)).strftime("%Y-%m-%d")
     activities = []
     for done in (0, 1):
         batch = pd_get_all("activities", {"done": done, "start_date": since})
-        activities.extend(norm_activity(a) for a in batch)
+        for a in batch:
+            act = norm_activity(a)
+            # Enriquece com o owner do deal vinculado (se existir)
+            deal_id = str(act["deal_id"]) if act.get("deal_id") else None
+            act["deal_owner_id"] = deal_owner_map.get(deal_id) if deal_id else None
+            activities.append(act)
 
     return {
         "ok":          True,
