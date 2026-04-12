@@ -1346,17 +1346,16 @@ function renderAtividadesKPI() {
   const to         = STATE.toDate;
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
 
-  // Para a Visão Geral sempre mostrar atividades do time, ignoramos o filtro de
-  // vendedor quando ele não tem atividades atribuídas no Pipedrive
-  // (atividades ficam sob o responsável — Leonardo — não sob o consultor de deals)
+  // Mapa deal_id → owner_id para associar atividades ao dono do deal
+  const dealOwnerMapKPI = {};
+  RAW.deals.forEach(d => { if (d.id) dealOwnerMapKPI[String(d.id)] = normId(d.owner_id); });
+
   let acts = RAW.activities.filter(a => {
     if (vid === 'all') return true;
-    return normId(a.user_id) === normId(vid);
+    const actOwner  = normId(a.user_id);
+    const dealOwner = a.deal_id ? (dealOwnerMapKPI[String(a.deal_id)] || '') : '';
+    return actOwner === normId(vid) || dealOwner === normId(vid);
   });
-  // Se o vendedor selecionado não tem atividades, cai para visão do time completo
-  if (acts.length === 0 && vid !== 'all') {
-    acts = RAW.activities;
-  }
 
   // Realizadas no período: filtra por marked_as_done_time (ou due_date) no range
   const done = acts.filter(a => {
@@ -2280,10 +2279,19 @@ function renderAtividades() {
     if (id && d.owner_name && !nameMap[id]) nameMap[id] = d.owner_name;
   });
 
+  // Mapa deal_id → owner_id (para associar atividades ao dono do deal)
+  // No Pipedrive as atividades são criadas por 1 usuário mas ligadas a deals de vários vendedores
+  const dealOwnerMap = {};
+  RAW.deals.forEach(d => { if (d.id) dealOwnerMap[String(d.id)] = normId(d.owner_id); });
+
   // ── Filtro principal: vendedor + período (due_date) ───────────────────────
   const acts = RAW.activities.filter(a => {
-    // Filtro de vendedor
-    if (vid !== 'all' && normId(a.user_id) !== normId(vid)) return false;
+    // Filtro de vendedor: verifica user_id da atividade OU owner do deal vinculado
+    if (vid !== 'all') {
+      const actOwner  = normId(a.user_id);
+      const dealOwner = a.deal_id ? (dealOwnerMap[String(a.deal_id)] || '') : '';
+      if (actOwner !== normId(vid) && dealOwner !== normId(vid)) return false;
+    }
     // Filtro de período: usa due_date como referência temporal da atividade
     if (from || to) {
       const t = _parseDate(a.due_date);
@@ -2328,13 +2336,22 @@ function renderAtividades() {
   });
 
   // ── Chart 2: Atividades por Consultor — Concluídas / Pendentes / Atrasadas ─
-  // Todos os consultores visíveis no filtro atual
+  // Resolve o "dono efetivo" de cada atividade: owner do deal vinculado (se existir),
+  // caso contrário usa o user_id da própria atividade
+  const effectiveOwner = a => {
+    if (a.deal_id) {
+      const o = dealOwnerMap[String(a.deal_id)];
+      if (o) return o;
+    }
+    return normId(a.user_id);
+  };
+
   const consultantIds = vid !== 'all'
     ? [normId(vid)]
-    : [...new Set(acts.map(a => normId(a.user_id)).filter(Boolean))];
+    : [...new Set(acts.map(effectiveOwner).filter(Boolean))];
 
   const cData = consultantIds.map(uid => {
-    const userActs = acts.filter(a => normId(a.user_id) === uid);
+    const userActs = acts.filter(a => effectiveOwner(a) === uid);
     const doneC = userActs.filter(a => a.done).length;
     const lateC = userActs.filter(a => !a.done && _parseDate(a.due_date) < todayStart).length;
     const pendC = userActs.filter(a => !a.done && _parseDate(a.due_date) >= todayStart).length;
