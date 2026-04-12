@@ -174,6 +174,30 @@ def ping():
     return "ok", 200
 
 
+@app.route("/debug-activities")
+def debug_activities():
+    """Retorna amostra de atividades brutas do Pipedrive para diagnóstico."""
+    from flask import jsonify as _jsonify
+    since = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+    raw = pd_get_all("activities", {"done": 0, "start_date": since, "limit": 5})
+    raw += pd_get_all("activities", {"done": 1, "start_date": since, "limit": 5})
+    sample = []
+    for a in raw[:10]:
+        sample.append({
+            "id":       a.get("id"),
+            "subject":  a.get("subject"),
+            "user_id":  a.get("user_id"),
+            "deal_id":  a.get("deal_id"),
+            "due_date": a.get("due_date"),
+            "done":     a.get("done"),
+            "assigned_to_user_id": a.get("assigned_to_user_id"),
+            "created_by_user_id":  a.get("created_by_user_id"),
+        })
+    users = pd_get("users")
+    user_list = [{"id": u.get("id"), "name": u.get("name")} for u in (users.get("data") or [])]
+    return _jsonify({"activities_sample": sample, "users": user_list})
+
+
 @app.route("/sheets-proxy")
 def sheets_proxy():
     global _cache
