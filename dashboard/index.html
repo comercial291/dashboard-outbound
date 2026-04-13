@@ -2287,13 +2287,20 @@ function renderAtividades() {
     normId(a.assigned_to_user_id) ||
     normId(a.created_by_user_id) || '';
 
+  // Helper: data relevante de uma atividade para filtro de período
+  // - Concluídas: marked_as_done_time (quando foi feita de fato) → fallback due_date
+  // - Pendentes/Atrasadas: due_date → fallback add_time
+  const actDate = a => a.done
+    ? (_parseDate(a.marked_as_done_time) || _parseDate(a.due_date) || _parseDate(a.add_time))
+    : (_parseDate(a.due_date) || _parseDate(a.add_time));
+
   // ── Filtro principal: vendedor + período ─────────────────────────────────
   const acts = RAW.activities.filter(a => {
     // Filtro de vendedor: usa qualquer campo de dono disponível
     if (vid !== 'all' && actEffOwner(a) !== normId(vid)) return false;
-    // Filtro de período: usa due_date, com fallback para add_time
+    // Filtro de período: concluídas por marked_as_done_time, pendentes por due_date
     if (from || to) {
-      const t = _parseDate(a.due_date) || _parseDate(a.add_time);
+      const t = actDate(a);
       if (!t) return false;
       if (from && t < from) return false;
       if (to   && t > to)   return false;
@@ -2401,28 +2408,31 @@ function renderAtividades() {
     if (!a.done && b.done)  return -1;
     if (a.done  && !b.done) return 1;
     // Dentro do mesmo grupo, data mais recente primeiro
-    const ta = _parseDate(a.due_date) || new Date(0);
-    const tb = _parseDate(b.due_date) || new Date(0);
+    const ta = actDate(a) || new Date(0);
+    const tb = actDate(b) || new Date(0);
     return tb - ta;
   }).slice(0, 100);
 
   const tbody = document.getElementById('tbody-atividades');
   tbody.innerHTML = recent.map(a => {
     const isDone = a.done;
-    const t      = _parseDate(a.due_date);
-    const isLate = !isDone && t && t < todayStart;   // ← usa todayStart (meia-noite local)
+    const tDue   = _parseDate(a.due_date);
+    const isLate = !isDone && tDue && tDue < todayStart;
     const statusClass = isDone ? 'badge-success' : (isLate ? 'badge-danger' : 'badge-warning');
     const statusText  = isDone ? 'Feita'         : (isLate ? 'Atrasada'     : 'Pendente');
     const rowStyle    = isLate ? 'background:rgba(239,68,68,.06)' : '';
     const vendorName  = nameMap[actEffOwner(a)] || nameMap[normId(a.user_id)] || '–';
     const dealTitle   = (dealTitles[a.deal_id]||'–').slice(0,35);
-    const dateStr     = a.due_date ? a.due_date.slice(0,10) : '–';
+    // Data exibida: se concluída, mostra quando foi feita; se pendente, mostra due_date
+    const dispDate = isDone
+      ? (a.marked_as_done_time ? a.marked_as_done_time.slice(0,10) : (a.due_date||'–').slice(0,10))
+      : (a.due_date ? a.due_date.slice(0,10) : '–');
     return `<tr style="${rowStyle}">
       <td><span class="badge badge-neutral">${a.type||'–'}</span></td>
       <td>${(a.subject||'–').slice(0,45)}</td>
       <td>${vendorName}</td>
       <td style="font-size:11px;color:var(--text2)">${dealTitle}</td>
-      <td style="font-size:12px">${dateStr}</td>
+      <td style="font-size:12px">${dispDate}</td>
       <td><span class="badge ${statusClass}">${statusText}</span></td>
     </tr>`;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">Sem atividades no período</td></tr>';
