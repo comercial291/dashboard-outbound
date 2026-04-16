@@ -2,6 +2,7 @@ import os
 import json
 import time
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from flask import Flask, request, Response, send_from_directory
 
@@ -140,30 +141,43 @@ def fetch_all_data() -> dict:
     stages     = [norm_stage(s) for s in stages_raw]
     stages_map = {s["id"]: s for s in stages}
 
-    # 2. Deals — ambos os pipelines, todos os status
+    # 2. Deals — ambos os pipelines, todos os status (em paralelo para reduzir latência)
+    def _fetch_deals(pid, status):
+        batch = pd_get_all("deals", {"pipeline_id": pid, "status": status})
+        return [norm_deal(d, pid, stages_map) for d in batch]
+
     deals = []
-    for pid in [PRESALES_PIPELINE_ID, SALES_PIPELINE_ID]:
-        for status in ("open", "won", "lost"):
-            batch = pd_get_all("deals", {"pipeline_id": pid, "status": status})
-            deals.extend(norm_deal(d, pid, stages_map) for d in batch)
+    combos = [(pid, st) for pid in [PRESALES_PIPELINE_ID, SALES_PIPELINE_ID]
+                        for st  in ("open", "won", "lost")]
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futures = {ex.submit(_fetch_deals, pid, st): (pid, st) for pid, st in combos}
+        for f in as_completed(futures):
+            deals.extend(f.result())
 
     # 3. Usuários
     users = [norm_user(u) for u in (pd_get("users").get("data") or [])]
 
-    # 4. Atividades (últimos 365 dias, pendentes e concluídas)
+    # 4. Atividades (últimos 180 dias, pendentes e concluídas — em paralelo)
     # Mapa deal_id → owner_id para enriquecer cada atividade com o dono do deal
-    deal_owner_map = {str(d["id"]): str(d["owner_id"]) for d in deals if d.get("id") and d.get("owner_id")}
+    deal_owner_map = {str(d["id"]): str(d["owner_id"])
+                      for d in deals if d.get("id") and d.get("owner_id")}
 
-    since = (datetime.utcnow() - timedelta(days=365)).strftime("%Y-%m-%d")
-    activities = []
-    for done in (0, 1):
-        batch = pd_get_all("activities", {"done": done, "start_date": since})
+    since = (datetime.utcnow() - timedelta(days=180)).strftime("%Y-%m-%d")
+
+    def _fetch_activities(done_flag):
+        batch = pd_get_all("activities", {"done": done_flag, "start_date": since})
+        result = []
         for a in batch:
             act = norm_activity(a)
-            # Enriquece com o owner do deal vinculado (se existir)
             deal_id = str(act["deal_id"]) if act.get("deal_id") else None
             act["deal_owner_id"] = deal_owner_map.get(deal_id) if deal_id else None
-            activities.append(act)
+            result.append(act)
+        return result
+
+    activities = []
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        for chunk in ex.map(_fetch_activities, [0, 1]):
+            activities.extend(chunk)
 
     return {
         "ok":          True,
