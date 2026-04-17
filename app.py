@@ -57,7 +57,9 @@ def _name(obj, key, fallback=""):
     return fallback
 
 
-def norm_deal(d: dict, pipeline_id: int, stages_map: dict) -> dict:
+def norm_deal(d: dict, stages_map: dict) -> dict:
+    # Usa o pipeline_id REAL do deal (não da query) — Pipedrive ignora pipeline_id para won/lost
+    pipeline_id = d.get("pipeline_id")
     sid    = d.get("stage_id")
     stage  = stages_map.get(sid, {})
     status = d.get("status", "")
@@ -141,18 +143,24 @@ def fetch_all_data() -> dict:
     stages     = [norm_stage(s) for s in stages_raw]
     stages_map = {s["id"]: s for s in stages}
 
-    # 2. Deals — ambos os pipelines, todos os status (em paralelo para reduzir latência)
+    # 2. Deals — ambos os pipelines, todos os status (em paralelo)
+    # IMPORTANTE: Pipedrive ignora pipeline_id para deals won/lost → mesmos deals
+    # aparecem em ambas as queries. Deduplica pelo ID real do deal.
     def _fetch_deals(pid, status):
         batch = pd_get_all("deals", {"pipeline_id": pid, "status": status})
-        return [norm_deal(d, pid, stages_map) for d in batch]
+        return [norm_deal(d, stages_map) for d in batch]
 
-    deals = []
+    deals_map = {}   # id → deal (deduplicação)
     combos = [(pid, st) for pid in [PRESALES_PIPELINE_ID, SALES_PIPELINE_ID]
                         for st  in ("open", "won", "lost")]
     with ThreadPoolExecutor(max_workers=6) as ex:
         futures = {ex.submit(_fetch_deals, pid, st): (pid, st) for pid, st in combos}
         for f in as_completed(futures):
-            deals.extend(f.result())
+            for d in f.result():
+                did = d.get("id")
+                if did is not None and did not in deals_map:
+                    deals_map[did] = d
+    deals = list(deals_map.values())
 
     # 3. Usuários
     users = [norm_user(u) for u in (pd_get("users").get("data") or [])]
