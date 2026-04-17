@@ -2479,25 +2479,27 @@ function renderIndividual() {
   const salesDeals = RAW.deals.filter(d => d.pipeline_id == SALES_PIPELINE_ID);
   const preDeals   = RAW.deals.filter(d => d.pipeline_id == PRESALES_PIPELINE_ID);
 
-  // Buckets mensais
+  // Buckets mensais — end clampado ao filtro (evita contar além do período selecionado)
   const months = [];
   let cur = new Date(from.getFullYear(), from.getMonth(), 1);
   while (cur <= to) {
+    const naturalEnd  = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    const clampedEnd  = naturalEnd > to ? new Date(to.getTime() + 1) : naturalEnd;
     months.push({
       label: MONTHS_PT[cur.getMonth()] + '/' + String(cur.getFullYear()).slice(2),
       start: new Date(cur),
-      end:   new Date(cur.getFullYear(), cur.getMonth() + 1, 1),
+      end:   clampedEnd,
     });
     cur.setMonth(cur.getMonth() + 1);
   }
   const nMonths = months.length || 1;
 
-  // Deals ganhos no período para userId (null = todos)
+  // Deals ganhos no período para userId (null = todos) — usa só data de fechamento real
   const wonInPeriod = (deals, userId) =>
     deals.filter(d => {
       if (userId !== null && normId(d.owner_id) !== userId) return false;
       if (d.status !== 'won') return false;
-      const t = _parseDate(d.won_time) || _parseDate(d.close_time) || _parseDate(d.update_time);
+      const t = _parseDate(d.won_time) || _parseDate(d.close_time);
       return t && t >= from && t <= to;
     });
 
