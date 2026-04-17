@@ -1174,11 +1174,19 @@ function dealsInRangeSmart(deals) {
 // Converte qualquer formato de data para Date, retorna null se inválido
 function _parseDate(val) {
   if (!val) return null;
-  // Normaliza "2026-04-05 14:30:00" → "2026-04-05T14:30:00" (ISO)
-  let s = typeof val === 'string' ? val.replace(' ', 'T') : val;
-  // Strings só-data "YYYY-MM-DD" são parseadas como UTC pelo JS (≠ horário local).
-  // Adiciona T00:00:00 para forçar interpretação como horário local (Brasil UTC-3).
-  if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)) s += 'T00:00:00';
+  if (typeof val !== 'string') { const d = new Date(val); return isNaN(d.getTime()) ? null : d; }
+  const s = val.trim();
+  // Só data "YYYY-MM-DD": datas de filtro do usuário → horário local (meia-noite local)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(s + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // Datetime do Pipedrive "YYYY-MM-DD HH:MM:SS": sempre UTC → append Z
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
+    const d = new Date(s.replace(' ', 'T') + 'Z');
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // Outros formatos (já têm T, Z ou offset)
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
